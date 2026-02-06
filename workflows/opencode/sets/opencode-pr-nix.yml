@@ -1,0 +1,131 @@
+# ---
+# id: opencode/opencode-pr-nix
+# category: opencode
+# type: set
+# name: OpenCode AI PR Review (Nix)
+# description: Automated AI-powered code review for pull requests using OpenCode and Nix
+# secrets:
+#   - name: KIMI_API_KEY
+#     description: API key for OpenCode AI service
+#     required: true
+# inputs: []
+# triggers: [pull_request]
+# variants:
+#   - name: nix
+#     description: Uses Nix for reproducible environment
+# ---
+
+name: OpenCode AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size: 1G
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-primary-key: never
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          nix develop --command bash -c '
+            git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+          '
+          echo "diff_path=pr_diff.txt" >> $GITHUB_OUTPUT
+
+      - name: Get previous review comments
+        id: previous-comments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            const opencodeComments = comments.data.filter(c => 
+              c.user.login === 'github-actions[bot]' && 
+              c.body.includes('OpenCode AI Review')
+            );
+            return opencodeComments.map(c => c.body).join('\n---\n');
+
+      - name: Run OpenCode AI Review
+        env:
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+        run: |
+          nix develop --command bash -c '
+            DIFF_CONTENT=$(cat pr_diff.txt)
+            PREVIOUS_COMMENTS="${{ steps.previous-comments.outputs.result }}"
+            
+            PROMPT=$(cat <<EOF
+You are an expert code reviewer. Review the following pull request:
+
+Title: ${{ github.event.pull_request.title }}
+Description: ${{ github.event.pull_request.body }}
+
+Previous Review Context:
+$PREVIOUS_COMMENTS
+
+Code Changes:
+\`\`\`diff
+$DIFF_CONTENT
+\`\`\`
+
+Provide a structured review with:
+1. Overall assessment (merge-ready, needs changes, etc.)
+2. Critical issues (if any)
+3. High-priority improvements
+4. Medium-priority suggestions
+5. Low-priority nitpicks
+6. Confidence score (0-100)
+
+Format as markdown with clear headers.
+EOF
+)
+            
+            curl -X POST https://api.opencode.ai/v1/chat/completions \
+              -H "Authorization: Bearer $KIMI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"model\": \"kimi-latest\",
+                \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}]
+              }" > review_response.json
+            
+            cat review_response.json | jq -r ".choices[0].message.content" > review_output.txt
+          '
+
+      - name: Post review comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reviewText = fs.readFileSync('review_output.txt', 'utf8');
+            const formattedReview = `## OpenCode AI Review 🤖\n\n${reviewText}`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: formattedReview
+            });

@@ -1,0 +1,142 @@
+# ---
+# id: opencode/opencode-triage
+# category: opencode
+# type: set
+# name: OpenCode Issue Triage
+# description: AI-powered issue classification and initial response for new issues
+# secrets:
+#   - name: KIMI_API_KEY
+#     description: API key for OpenCode AI service
+#     required: true
+# inputs: []
+# triggers: [issues]
+# variants:
+#   - name: standard
+#     description: Uses standard GitHub Actions
+# ---
+
+name: OpenCode Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check account age
+        id: account-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: user } = await github.rest.users.getByUsername({
+              username: context.payload.issue.user.login
+            });
+            
+            const createdAt = new Date(user.created_at);
+            const now = new Date();
+            const daysOld = (now - createdAt) / (1000 * 60 * 60 * 24);
+            
+            console.log(`Account is ${daysOld} days old`);
+            
+            if (daysOld < 30) {
+              console.log('Account is new, skipping AI triage');
+              return 'skip';
+            }
+            return 'process';
+
+      - name: Checkout repository
+        if: steps.account-check.outputs.result == 'process'
+        uses: actions/checkout@v4
+
+      - name: Analyze issue
+        if: steps.account-check.outputs.result == 'process'
+        env:
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          PROMPT=$(cat <<EOF
+You are an expert issue triage assistant for a GitHub repository.
+
+Analyze this new issue and provide:
+1. Classification (Bug, Feature Request, Question, or Other)
+2. Priority estimate (Critical, High, Medium, Low)
+3. Missing information (what details are needed)
+4. Suggested scope breakdown (if this is a large request)
+5. Initial response to the user
+
+Issue Title: $ISSUE_TITLE
+Issue Body: $ISSUE_BODY
+
+Format your response as JSON:
+{
+  "classification": "...",
+  "priority": "...",
+  "missing_info": ["..."],
+  "scope_breakdown": ["..."],
+  "response": "..."
+}
+EOF
+)
+          
+          curl -X POST https://api.opencode.ai/v1/chat/completions \
+            -H "Authorization: Bearer $KIMI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"model\": \"kimi-latest\",
+              \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}]
+            }" > analysis.json
+          
+          cat analysis.json | jq -r '.choices[0].message.content' > analysis.txt
+          cat analysis.txt
+
+      - name: Apply labels and respond
+        if: steps.account-check.outputs.result == 'process'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const content = fs.readFileSync('analysis.txt', 'utf8');
+            
+            // Try to parse JSON response
+            let analysis;
+            try {
+              // Extract JSON from markdown code block if present
+              const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
+                               content.match(/\{[\s\S]*\}/);
+              analysis = JSON.parse(jsonMatch ? jsonMatch[1] || jsonMatch[0] : content);
+            } catch (e) {
+              console.log('Failed to parse JSON, using raw response');
+              analysis = {
+                classification: 'Unknown',
+                response: content
+              };
+            }
+            
+            // Apply classification label
+            const labelMap = {
+              'Bug': 'bug',
+              'Feature Request': 'enhancement',
+              'Question': 'question'
+            };
+            
+            if (labelMap[analysis.classification]) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: [labelMap[analysis.classification]]
+              });
+            }
+            
+            // Post AI response
+            const response = analysis.response || content;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `🤖 **OpenCode AI Triage**\n\n**Classification:** ${analysis.classification || 'Unknown'}\n**Priority:** ${analysis.priority || 'Unknown'}\n\n${response}`
+            });
