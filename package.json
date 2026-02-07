@@ -1,6 +1,6 @@
 {
   "name": "@openstaticfish/actionflow",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A terminal UI tool for managing and installing GitHub Actions workflow templates",
   "license": "MIT",
   "author": "OpenStaticFish <contact@openstaticfish.com>",
@@ -61,6 +61,7 @@
   "dependencies": {
     "ink": "^6.6.0",
     "react": "^19.2.4",
+    "react-devtools-core": "^6.1.1",
     "yaml": "^2.4.0"
   }
 }
