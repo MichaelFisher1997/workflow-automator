@@ -73,44 +73,28 @@ jobs:
       - name: Run OpenCode AI Review
         env:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_DESCRIPTION: ${{ github.event.pull_request.body }}
+          PREVIOUS_COMMENTS: ${{ steps.previous-comments.outputs.result }}
         run: |
           nix develop --command bash -c '
             DIFF_CONTENT=$(cat pr_diff.txt)
-            PREVIOUS_COMMENTS="${{ steps.previous-comments.outputs.result }}"
             
-            PROMPT=$(cat <<EOF
-You are an expert code reviewer. Review the following pull request:
-
-Title: ${{ github.event.pull_request.title }}
-Description: ${{ github.event.pull_request.body }}
-
-Previous Review Context:
-$PREVIOUS_COMMENTS
-
-Code Changes:
-\`\`\`diff
-$DIFF_CONTENT
-\`\`\`
-
-Provide a structured review with:
-1. Overall assessment (merge-ready, needs changes, etc.)
-2. Critical issues (if any)
-3. High-priority improvements
-4. Medium-priority suggestions
-5. Low-priority nitpicks
-6. Confidence score (0-100)
-
-Format as markdown with clear headers.
-EOF
-)
+            # Build prompt using printf and jq
+            PROMPT=$(printf "%s\n\nTitle: %s\n\nDescription: %s\n\nPrevious Review Context:\n%s\n\nCode Changes:\n%s\n\nProvide a structured review with:\n1. Overall assessment (merge-ready, needs changes, etc.)\n2. Critical issues (if any)\n3. High-priority improvements\n4. Medium-priority suggestions\n5. Low-priority nitpicks\n6. Confidence score (0-100)\n\nFormat as markdown with clear headers." \
+              "You are an expert code reviewer. Review the following pull request:" \
+              "$PR_TITLE" \
+              "$PR_DESCRIPTION" \
+              "$PREVIOUS_COMMENTS" \
+              "$DIFF_CONTENT")
+            
+            # Create JSON payload using jq
+            jq -n --arg content "$PROMPT" "{\n              model: \\"kimi-latest\\",\n              messages: [{\n                role: \\"user\\",\n                content: $content\n              }]\n            }" > prompt.json
             
             curl -X POST https://api.opencode.ai/v1/chat/completions \
               -H "Authorization: Bearer $KIMI_API_KEY" \
               -H "Content-Type: application/json" \
-              -d "{
-                \"model\": \"kimi-latest\",
-                \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}]
-              }" > review_response.json
+              -d @prompt.json > review_response.json
             
             cat review_response.json | jq -r ".choices[0].message.content" > review_output.txt
           '

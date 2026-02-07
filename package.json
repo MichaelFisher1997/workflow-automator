@@ -1,19 +1,59 @@
 {
-  "name": "workflow-automator",
-  "module": "src/tui/index.tsx",
-  "type": "module",
-  "private": true,
+  "name": "@openstaticfish/actionflow",
+  "version": "0.1.0",
+  "description": "A terminal UI tool for managing and installing GitHub Actions workflow templates",
+  "license": "MIT",
+  "author": "OpenStaticFish <contact@openstaticfish.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openstaticfish/actionflow.git"
+  },
+  "homepage": "https://github.com/openstaticfish/actionflow#readme",
+  "bugs": {
+    "url": "https://github.com/openstaticfish/actionflow/issues"
+  },
+  "keywords": [
+    "github-actions",
+    "workflow",
+    "cli",
+    "terminal",
+    "tui",
+    "automation",
+    "ci-cd",
+    "templates"
+  ],
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "bin": {
-    "workflow-automator": "./src/tui/index.tsx"
+    "actionflow": "./dist/index.js",
+    "af": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "workflows",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
   },
   "scripts": {
     "start": "bun run src/tui/index.tsx",
     "build": "bun build src/tui/index.tsx --outdir=dist --target=bun",
+    "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist",
+    "prepublishOnly": "bun run build && bun run build:types",
     "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/react": "^18.2.0"
+    "@types/react": "^18.2.0",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"
