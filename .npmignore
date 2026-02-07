@@ -1,0 +1,29 @@
+# Source files (we publish compiled dist/)
+src/
+
+# Development
+node_modules/
+.github/
+CLAUDE.md
+AGENTS.md
+.env
+.env.local
+
+# Build artifacts
+dist/**/*.test.js
+dist/**/*.test.d.ts
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+.nyc_output/
+
+# OS
+.DS_Store
+Thumbs.db
