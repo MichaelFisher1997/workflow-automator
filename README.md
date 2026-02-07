@@ -1,13 +1,15 @@
 # Workflow Automator
 
-CLI tool for installing curated GitHub Actions workflows into repositories.
+Interactive TUI for installing curated GitHub Actions workflows with a cyberpunk aesthetic.
 
 ## Features
 
-- **Curated Workflows**: Pre-configured workflows ready to run
-- **Variant Support**: Standard and Nix-based toolchain options
-- **Safe Installation**: Never overwrites without explicit confirmation
-- **Clear UX**: Shows required secrets and setup requirements
+- 🎨 **Cyberpunk UI**: Neon colors, smooth animations, modern terminal interface
+- ⚡ **Fast Navigation**: Vim keys (j/k), arrow keys, number shortcuts
+- 🎯 **Two-Panel Layout**: Browse workflows on the left, see details on the right
+- 🔒 **Safe Installation**: Never overwrites without confirmation
+- 📐 **Terminal Aware**: Warns if terminal is too small, adapts to window size
+- 🎹 **Keyboard Driven**: No mouse required
 
 ## Installation
 
@@ -17,62 +19,53 @@ bun install
 
 ## Usage
 
-### List available workflows
+Launch the TUI:
 
 ```bash
-bun run src/cli.ts list
+bun run src/tui/index.tsx
+# or
+./src/tui/index.tsx
 ```
 
-Options:
-- `--category <category>` - Filter by category
-- `--type <type>` - Filter by type (set|template)
-- `--variant <variant>` - Filter by variant
-- `--json` - Output as JSON
-
-### Inspect a workflow
+Or install globally:
 
 ```bash
-bun run src/cli.ts inspect <workflow-id>
+bun link
+workflow-automator
 ```
 
-Example:
-```bash
-bun run src/cli.ts inspect opencode/opencode-pr
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `↑/↓` or `j/k` | Navigate workflows |
+| `←/→` or `h/l` | Switch category |
+| `1-9` | Jump to workflow # |
+| `Tab` | Switch variant (standard/nix) |
+| `Enter` | Install selected workflow |
+| `?` | Toggle help overlay |
+| `q` or `Ctrl+C` | Quit |
+
+## UI Layout
+
 ```
-
-Options:
-- `--variant <name>` - Show specific variant (default: standard)
-- `--raw` - Show raw workflow YAML
-
-### Install a workflow
-
-```bash
-bun run src/cli.ts install <workflow-id>
+┌─────────────────────────────────────────────────────────────────┐
+│  ⚡ WORKFLOW AUTOMATOR v1.0          Category: [opencode ▼]   │
+├──────────────────┬──────────────────────────────────────────────┤
+│  🔍 Workflows    │  ┌─ Workflow Details ──────────────────────┐│
+│  [1] opencode-pr │  │  🔍 OpenCode AI PR Review               ││
+│  [2] opencode    │  │                                           ││
+│  [3] opencode-tri│  │  Type: set ✓ ready-to-run               ││
+│                  │  │  Variants: ● standard  ○ nix            ││
+│                  │  │                                           ││
+│                  │  │  ⚠️  Secrets: KIMI_API_KEY              ││
+│                  │  │                                           ││
+│                  │  │  [Enter] Install (standard)             ││
+│                  │  └───────────────────────────────────────────┘│
+├──────────────────┴──────────────────────────────────────────────┤
+│  [←/→] Category  [↑/↓] Navigate  [Tab] Variant  [Enter] Install │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
-Example:
-```bash
-# Install standard variant
-bun run src/cli.ts install opencode/opencode-pr
-
-# Install Nix variant
-bun run src/cli.ts install opencode/opencode-pr --variant nix
-
-# Dry run (see what would be installed)
-bun run src/cli.ts install opencode/opencode-pr --dry-run
-
-# Install to specific target
-bun run src/cli.ts install opencode/opencode-pr --target /path/to/repo
-
-# Force overwrite existing file
-bun run src/cli.ts install opencode/opencode-pr --force
-```
-
-Options:
-- `--variant <name>` - Install specific variant (default: standard)
-- `--force` - Overwrite existing files
-- `--dry-run` - Show what would be installed
-- `--target <path>` - Target repository path (default: current directory)
 
 ## Available Workflows
 
@@ -84,39 +77,52 @@ Options:
 | `opencode/opencode` | set | standard, nix | Slash command handler (/oc) |
 | `opencode/opencode-triage` | set | standard | AI issue triage |
 
-## Workflow Structure
-
-Workflows are organized by:
-- **Category**: Product/ecosystem grouping (e.g., `opencode`)
-- **Type**: `set` (ready-to-run) or `template` (requires edits)
-- **Variant**: `standard` or `nix` toolchain
-
 ## Requirements
 
+- Terminal with minimum 80x24 characters
+- Truecolor support recommended (iTerm2, Kitty, Alacritty)
 - Bun runtime
-- Target repository must have `.github/workflows` directory (created automatically)
-- Some workflows require secrets (shown during install)
 
 ## Architecture
 
 ```
-workflows/
-  opencode/
-    sets/
-      opencode.yml              # standard variant
-      opencode-nix.yml          # nix variant
-      opencode-pr.yml           # standard variant
-      opencode-pr-nix.yml       # nix variant
-      opencode-triage.yml       # standard variant
-
 src/
-  cli.ts                      # CLI entry point
-  commands/
-    list.ts                   # List command
-    inspect.ts                # Inspect command
-    install.ts                # Install command
-  core/
-    registry.ts               # Workflow discovery
-  models/
-    workflow.ts               # Type definitions
+├── tui/                      # TUI application
+│   ├── index.tsx             # Entry point
+│   ├── components/           # React components
+│   │   ├── App.tsx
+│   │   ├── Header.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── DetailPanel.tsx
+│   │   ├── HelpOverlay.tsx
+│   │   ├── TooSmallPopup.tsx
+│   │   └── Spinner.tsx
+│   ├── hooks/                # Custom hooks
+│   │   ├── useTerminalSize.ts
+│   │   ├── useWorkflows.ts
+│   │   └── useNavigation.ts
+│   ├── theme/
+│   │   └── cyberpunk.ts      # Color palette
+│   └── utils/
+│       └── terminal-check.ts
+├── core/
+│   └── registry.ts           # Workflow discovery
+└── models/
+    └── workflow.ts           # Type definitions
+```
+
+## Theme Customization
+
+Edit `src/tui/theme/cyberpunk.ts` to customize colors:
+
+```typescript
+colors: {
+  bg: '#0a0a0f',           // Background
+  primary: '#00f5ff',      // Cyan accent
+  secondary: '#ff00ff',    // Magenta
+  success: '#00ff88',      // Green
+  warning: '#ffea00',      // Yellow
+  error: '#ff0044',        // Red
+  // ... more colors
+}
 ```
