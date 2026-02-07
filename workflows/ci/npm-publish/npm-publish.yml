@@ -3,10 +3,10 @@
 # category: ci
 # type: template
 # name: NPM Publish
-# description: Automatically publish to npm when version changes on main branch
+# description: Automatically publish to npm when version changes on main branch. NOTE: NPM_TOKEN is a granular access token that expires after 1 year and must be rotated annually.
 # secrets:
 #   - name: NPM_TOKEN
-#     description: NPM authentication token with publish access
+#     description: NPM granular access token with publish access (expires after 1 year, requires yearly rotation)
 #     required: true
 # inputs: []
 # triggers: [push]
@@ -60,6 +60,9 @@ jobs:
             echo "Version unchanged: $CURRENT_VERSION"
           fi
 
+      # NOTE: NPM_TOKEN is a granular access token that expires after 1 year.
+      # Set a calendar reminder to rotate this token before it expires.
+      # Go to npmjs.com → Access Tokens → Generate New Token → Granular Access Token
       - name: Publish to npm
         if: steps.check.outputs.version_changed == 'true'
         env:
