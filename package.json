@@ -1,6 +1,6 @@
 {
   "name": "@openstaticfish/actionflow",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A terminal UI tool for managing and installing GitHub Actions workflow templates",
   "license": "MIT",
   "author": "OpenStaticFish <contact@openstaticfish.com>",

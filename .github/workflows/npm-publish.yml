@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -48,8 +50,7 @@ jobs:
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           
           # Get the previous version from the last commit
-          git fetch origin main~1:main~1
-          PREVIOUS_VERSION=$(git show main~1:package.json | jq -r '.version')
+          PREVIOUS_VERSION=$(git show HEAD~1:package.json | jq -r '.version')
           echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
           
           if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
