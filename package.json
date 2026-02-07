@@ -44,6 +44,7 @@
     "bun": ">=1.0.0"
   },
   "scripts": {
+    "postinstall": "bun run build",
     "start": "bun run src/tui/index.tsx",
     "build": "bun build src/tui/index.tsx --outdir=dist --target=bun",
     "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist",
