@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { cyberpunkTheme } from '../theme/cyberpunk.js';
+import { installWorkflow } from '../utils/install-workflow.js';
 import type { Workflow } from '../../models/workflow.js';
 
 interface DetailPanelProps {
@@ -19,7 +20,21 @@ export function DetailPanel({
   onInstall 
 }: DetailPanelProps) {
   const [isInstalling, setIsInstalling] = useState(false);
-  const [installResult, setInstallResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [installResult, setInstallResult] = useState<{ success: boolean; message: string; details?: { targetFile: string; created: boolean; overwritten: boolean } } | null>(null);
+  const [force, setForce] = useState(false);
+  const [dryRun, setDryRun] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+
+  // Handle keyboard shortcuts for options
+  useInput((input) => {
+    if (installResult || isInstalling) return;
+    
+    if (input === 'd') {
+      setDryRun(prev => !prev);
+    } else if (input === 'f') {
+      setForce(prev => !prev);
+    }
+  });
 
   if (!workflow) {
     return (
@@ -39,18 +54,36 @@ export function DetailPanel({
   }
 
   const handleInstall = async () => {
+    const variant = workflow.variants.find(v => v.name === selectedVariant);
+    if (!variant) return;
+
     setIsInstalling(true);
     setInstallResult(null);
-    
-    // Simulate install - replace with actual install logic
-    setTimeout(() => {
-      setIsInstalling(false);
-      setInstallResult({ 
-        success: true, 
-        message: `Installed ${workflow.metadata.name} (${selectedVariant})` 
+
+    try {
+      const result = await installWorkflow(workflow, variant, {
+        force,
+        dryRun,
+        targetPath: '.',
       });
-      onInstall();
-    }, 1000);
+
+      setInstallResult({
+        success: result.success,
+        message: result.message,
+        details: result.details,
+      });
+
+      if (result.success && !dryRun) {
+        onInstall();
+      }
+    } catch (error) {
+      setInstallResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
+      });
+    } finally {
+      setIsInstalling(false);
+    }
   };
 
   const variant = workflow.variants.find(v => v.name === selectedVariant);
@@ -135,14 +168,45 @@ export function DetailPanel({
               Installing...
             </Text>
           ) : installResult ? (
-            <Text color={installResult.success ? cyberpunkTheme.colors.success : cyberpunkTheme.colors.error}>
-              {installResult.success ? '✓' : '✗'} {installResult.message}
-            </Text>
-          ) : (
-            <Box>
-              <Text color={cyberpunkTheme.colors.secondary}>
-                [Enter] Install ({selectedVariant})
+            <Box flexDirection="column">
+              <Text color={installResult.success ? cyberpunkTheme.colors.success : cyberpunkTheme.colors.error}>
+                {installResult.success ? '✓' : '✗'} {installResult.message}
               </Text>
+              {installResult.details && (
+                <Box marginTop={1} flexDirection="column">
+                  <Text color={cyberpunkTheme.colors.muted}>
+                    → {installResult.details.targetFile}
+                  </Text>
+                  {installResult.details.created && (
+                    <Text color={cyberpunkTheme.colors.info}>
+                      ✓ Created .github/workflows/
+                    </Text>
+                  )}
+                  {installResult.details.overwritten && (
+                    <Text color={cyberpunkTheme.colors.warning}>
+                      ⚠ Overwritten existing file
+                    </Text>
+                  )}
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Box flexDirection="column">
+              <Box marginBottom={1}>
+                <Text color={cyberpunkTheme.colors.secondary}>
+                  [Enter] Install ({selectedVariant})
+                </Text>
+              </Box>
+              <Box flexDirection="row">
+                <Text color={dryRun ? cyberpunkTheme.colors.primary : cyberpunkTheme.colors.muted}>
+                  [{dryRun ? '✓' : ' '}] [D] Dry-run
+                </Text>
+                <Box marginLeft={2}>
+                  <Text color={force ? cyberpunkTheme.colors.warning : cyberpunkTheme.colors.muted}>
+                    [{force ? '✓' : ' '}] [F] Force overwrite
+                  </Text>
+                </Box>
+              </Box>
             </Box>
           )}
         </Box>
