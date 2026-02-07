@@ -1,4 +1,4 @@
-# Agent Guidelines for ActionFlow
+# Agent Guidelines for workflow-automator
 
 This document provides guidelines for AI agents working on this repository.
 

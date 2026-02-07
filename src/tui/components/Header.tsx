@@ -36,7 +36,7 @@ export function Header({
       alignItems="center"
     >
       <Text bold color={cyberpunkTheme.colors.primary}>
-        ⚡ ACTIONFLOW
+        ⚡ WORKFLOW AUTOMATOR
       </Text>
       
       <Box marginLeft={2}>
