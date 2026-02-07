@@ -2,8 +2,8 @@
 # id: opencode/opencode
 # category: opencode
 # type: set
-# name: OpenCode Slash Commands
-# description: Responds to /oc and /opencode commands in issues and PRs
+# name: OpenCode AI Slash Commands
+# description: OpenCode AI slash command handler (/oc, /opencode)
 # secrets:
 #   - name: KIMI_API_KEY
 #     description: API key for OpenCode AI service
@@ -12,12 +12,10 @@
 # triggers: [issue_comment, pull_request_review_comment]
 # variants:
 #   - name: standard
-#     description: Uses standard GitHub Actions with direct API calls
-#   - name: nix
-#     description: Uses Nix for reproducible environment
+#     description: Uses OpenCode GitHub Action
 # ---
 
-name: OpenCode Slash Commands
+name: OpenCode AI Slash Commands
 
 on:
   issue_comment:
@@ -26,84 +24,30 @@ on:
     types: [created]
 
 jobs:
-  handle-command:
+  opencode:
+    if: |
+      contains(github.event.comment.body, ' /oc') ||
+      startsWith(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, ' /opencode') ||
+      startsWith(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
-    if: github.event.comment.body =~ /^\/(oc|opencode)\b/
-    
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Parse command
-        id: parse
+      - name: Configure git
         run: |
-          COMMENT_BODY="${{ github.event.comment.body }}"
-          
-          # Extract command after /oc or /opencode
-          if [[ "$COMMENT_BODY" =~ ^/oc\s*(.*) ]]; then
-            COMMAND="${BASH_REMATCH[1]}"
-          elif [[ "$COMMENT_BODY" =~ ^/opencode\s*(.*) ]]; then
-            COMMAND="${BASH_REMATCH[1]}"
-          fi
-          
-          echo "command=$COMMAND" >> $GITHUB_OUTPUT
-          echo "Parsed command: $COMMAND"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Gather context
-        id: context
-        run: |
-          # Get issue/PR context
-          if [ "${{ github.event.issue.number }}" != "" ]; then
-            echo "type=issue" >> $GITHUB_OUTPUT
-            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-          else
-            echo "type=pr" >> $GITHUB_OUTPUT
-            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Run OpenCode AI
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest
         env:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
-          COMMAND: ${{ steps.parse.outputs.command }}
-          CONTEXT_TYPE: ${{ steps.context.outputs.type }}
-          ISSUE_NUMBER: ${{ steps.context.outputs.number }}
-        run: |
-          # Build context for AI
-          PROMPT=$(cat <<EOF
-You are an AI assistant helping with a GitHub repository. 
-
-Command: $COMMAND
-Context: $CONTEXT_TYPE #$ISSUE_NUMBER
-
-Repository: ${{ github.repository }}
-
-Please provide a helpful response to the user's command.
-EOF
-)
-          
-          # Call OpenCode API
-          curl -X POST https://api.opencode.ai/v1/chat/completions \
-            -H "Authorization: Bearer $KIMI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"kimi-latest\",
-              \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}]
-            }" > response.json
-          
-          cat response.json | jq -r '.choices[0].message.content' > response.txt
-
-      - name: Post response
-        uses: actions/github-script@v7
         with:
-          script: |
-            const fs = require('fs');
-            const response = fs.readFileSync('response.txt', 'utf8');
-            
-            const reply = `🤖 **OpenCode AI**\n\n${response}`;
-            
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ steps.context.outputs.number }},
-              body: reply
-            });
+          model: kimi-for-coding/k2p5

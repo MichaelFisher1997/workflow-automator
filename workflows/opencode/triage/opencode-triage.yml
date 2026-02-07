@@ -2,8 +2,8 @@
 # id: opencode/opencode-triage
 # category: opencode
 # type: set
-# name: OpenCode Issue Triage
-# description: AI-powered issue classification and initial response for new issues
+# name: OpenCode AI Issue Triage
+# description: Automated issue triage using OpenCode AI
 # secrets:
 #   - name: KIMI_API_KEY
 #     description: API key for OpenCode AI service
@@ -12,10 +12,10 @@
 # triggers: [issues]
 # variants:
 #   - name: standard
-#     description: Uses standard GitHub Actions
+#     description: Uses OpenCode GitHub Action
 # ---
 
-name: OpenCode Issue Triage
+name: OpenCode AI Issue Triage
 
 on:
   issues:
@@ -24,119 +24,58 @@ on:
 jobs:
   triage:
     runs-on: ubuntu-latest
-    
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - name: Check account age
-        id: account-check
+        id: check
         uses: actions/github-script@v7
         with:
           script: |
-            const { data: user } = await github.rest.users.getByUsername({
+            const user = await github.rest.users.getByUsername({
               username: context.payload.issue.user.login
             });
-            
-            const createdAt = new Date(user.created_at);
-            const now = new Date();
-            const daysOld = (now - createdAt) / (1000 * 60 * 60 * 24);
-            
-            console.log(`Account is ${daysOld} days old`);
-            
-            if (daysOld < 30) {
-              console.log('Account is new, skipping AI triage');
-              return 'skip';
-            }
-            return 'process';
+            const created = new Date(user.data.created_at);
+            const days = (Date.now() - created) / (1000 * 60 * 60 * 24);
+            return days >= 30;
+          result-encoding: string
 
-      - name: Checkout repository
-        if: steps.account-check.outputs.result == 'process'
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.result == 'true'
 
-      - name: Analyze issue
-        if: steps.account-check.outputs.result == 'process'
+      - name: Configure git
+        if: steps.check.outputs.result == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - uses: anomalyco/opencode/github@latest
+        if: steps.check.outputs.result == 'true'
         env:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-        run: |
-          PROMPT=$(cat <<EOF
-You are an expert issue triage assistant for a GitHub repository.
-
-Analyze this new issue and provide:
-1. Classification (Bug, Feature Request, Question, or Other)
-2. Priority estimate (Critical, High, Medium, Low)
-3. Missing information (what details are needed)
-4. Suggested scope breakdown (if this is a large request)
-5. Initial response to the user
-
-Issue Title: $ISSUE_TITLE
-Issue Body: $ISSUE_BODY
-
-Format your response as JSON:
-{
-  "classification": "...",
-  "priority": "...",
-  "missing_info": ["..."],
-  "scope_breakdown": ["..."],
-  "response": "..."
-}
-EOF
-)
-          
-          curl -X POST https://api.opencode.ai/v1/chat/completions \
-            -H "Authorization: Bearer $KIMI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"kimi-latest\",
-              \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}]
-            }" > analysis.json
-          
-          cat analysis.json | jq -r '.choices[0].message.content' > analysis.txt
-          cat analysis.txt
-
-      - name: Apply labels and respond
-        if: steps.account-check.outputs.result == 'process'
-        uses: actions/github-script@v7
         with:
-          script: |
-            const fs = require('fs');
-            const content = fs.readFileSync('analysis.txt', 'utf8');
-            
-            // Try to parse JSON response
-            let analysis;
-            try {
-              // Extract JSON from markdown code block if present
-              const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
-                               content.match(/\{[\s\S]*\}/);
-              analysis = JSON.parse(jsonMatch ? jsonMatch[1] || jsonMatch[0] : content);
-            } catch (e) {
-              console.log('Failed to parse JSON, using raw response');
-              analysis = {
-                classification: 'Unknown',
-                response: content
-              };
-            }
-            
-            // Apply classification label
-            const labelMap = {
-              'Bug': 'bug',
-              'Feature Request': 'enhancement',
-              'Question': 'question'
-            };
-            
-            if (labelMap[analysis.classification]) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                labels: [labelMap[analysis.classification]]
-              });
-            }
-            
-            // Post AI response
-            const response = analysis.response || content;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `🤖 **OpenCode AI Triage**\n\n**Classification:** ${analysis.classification || 'Unknown'}\n**Priority:** ${analysis.priority || 'Unknown'}\n\n${response}`
-            });
+          model: kimi-for-coding/k2p5
+          prompt: |
+            Analyze this issue. You have access to the codebase context.
+            **CRITICAL: Your only allowed action is to post a COMMENT on the issue. DO NOT create branches, pull requests, or attempt to modify the codebase.**
+
+            1. **Classify**: Determine if this is a Bug, Feature Request, or Question.
+            2. **Validate & Request Info**:
+               - **Missing Data**: If critical information is needed to understand or reproduce the issue (e.g., reproduction steps, crash logs, version numbers, screenshots), explicitly ask the user to provide it.
+            3. **Analyze**:
+               - If a stack trace or error is provided, analyze the codebase to find the root cause and provide code pointers.
+               - If it's a feature request, briefly summarize the architectural impact.
+               - **Check for Scope**: Determine if this issue is too broad or complex and should be broken down into smaller, manageable sub-issues. Consider breaking up if:
+                 - Multiple unrelated changes or features are requested
+                 - The scope spans multiple subsystems (e.g., graphics + physics + UI)
+                 - The issue description is vague or covers multiple distinct problems
+                 - The implementation would require multiple independent PRs
+            4. **Action**:
+               - Your response MUST be a comment on the issue.
+               - If you can provide a potential fix or documentation link, describe it in the comment but do NOT implement it.
+               - If you need more info, specify exactly what is missing.
+               - If the issue is vague, spam, or you have nothing valuable to add: **DO NOT COMMENT**.
+               - If the issue should be broken into sub-issues, clearly state this and suggest specific sub-tasks or areas to split.
