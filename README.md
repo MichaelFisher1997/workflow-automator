@@ -1,4 +1,4 @@
-# Workflow Automator
+# ActionFlow
 
 Interactive TUI for installing curated GitHub Actions workflows with a cyberpunk aesthetic.
 
@@ -30,8 +30,8 @@ bun run src/tui/index.tsx
 Or install globally:
 
 ```bash
-bun link
-workflow-automator
+bun install -g @openstaticfish/actionflow
+actionflow
 ```
 
 ## Keyboard Shortcuts
@@ -50,7 +50,7 @@ workflow-automator
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  ⚡ WORKFLOW AUTOMATOR v1.0          Category: [opencode ▼]   │
+│  ⚡ ACTIONFLOW v0.1.0                 Category: [opencode ▼]   │
 ├──────────────────┬──────────────────────────────────────────────┤
 │  🌲 Tree         │  ┌─ Workflow Details ──────────────────────┐│
 │  ▾ pr            │  │  🔍 OpenCode AI PR Review               ││
