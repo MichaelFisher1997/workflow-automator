@@ -25,14 +25,15 @@ bun run src/tui/index.tsx
 ### Option 2: Install from GitHub
 
 ```bash
-# Install directly from GitHub
-bun install github:openstaticfish/actionflow
+# Install globally from GitHub
+bun install -g github:openstaticfish/actionflow
+actionflow  # Available globally
 
 # Or clone and link globally
 git clone https://github.com/openstaticfish/actionflow.git
 cd actionflow
 bun link
-actionflow  # Now available globally
+actionflow  # Available globally
 ```
 
 ### Option 3: NPM (coming soon)
