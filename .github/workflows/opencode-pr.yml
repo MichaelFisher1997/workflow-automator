@@ -12,9 +12,7 @@
 # triggers: [pull_request]
 # variants:
 #   - name: standard
-#     description: Uses standard GitHub Actions with direct API calls
-#   - name: nix
-#     description: Uses Nix for reproducible environment
+#     description: Uses OpenCode GitHub Action
 # ---
 
 name: OpenCode AI PR Review
@@ -24,89 +22,119 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
-  review:
+  opencode:
+    # Don't run on draft PRs; do run when they become ready_for_review.
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
-    
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: read
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
-        id: diff
+      - name: Configure git
         run: |
-          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
-          echo "diff_path=pr_diff.txt" >> $GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Get previous review comments
-        id: previous-comments
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number
-            });
-            const opencodeComments = comments.data.filter(c => 
-              c.user.login === 'github-actions[bot]' && 
-              c.body.includes('OpenCode AI Review')
-            );
-            return opencodeComments.map(c => c.body).join('\n---\n');
-
-      - name: Run OpenCode AI Review
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest
         env:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
-          PR_DIFF: ${{ steps.diff.outputs.diff_path }}
-          PREVIOUS_COMMENTS: ${{ steps.previous-comments.outputs.result }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_DESCRIPTION: ${{ github.event.pull_request.body }}
-        run: |
-          # Read the diff file
-          DIFF_CONTENT=$(cat "$PR_DIFF")
-          
-          # Build prompt using printf and jq
-          PROMPT=$(printf '%s\n\nTitle: %s\n\nDescription: %s\n\nPrevious Review Context:\n%s\n\nCode Changes:\n%s\n\nProvide a structured review with:\n1. Overall assessment (merge-ready, needs changes, etc.)\n2. Critical issues (if any)\n3. High-priority improvements\n4. Medium-priority suggestions\n5. Low-priority nitpicks\n6. Confidence score (0-100)\n\nFormat as markdown with clear headers.' \
-            "You are an expert code reviewer. Review the following pull request:" \
-            "$PR_TITLE" \
-            "$PR_DESCRIPTION" \
-            "$PREVIOUS_COMMENTS" \
-            "$DIFF_CONTENT")
-          
-          # Create JSON payload using jq
-          jq -n --arg content "$PROMPT" '{
-            model: "kimi-latest",
-            messages: [{
-              role: "user",
-              content: $content
-            }]
-          }' > prompt.json
-          
-          # Call OpenCode AI API
-          curl -X POST https://api.opencode.ai/v1/chat/completions \
-            -H "Authorization: Bearer $KIMI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d @prompt.json > review_response.json
-          
-          # Extract and post review
-          REVIEW_TEXT=$(cat review_response.json | jq -r '.choices[0].message.content')
-          
-          echo "$REVIEW_TEXT" > review_output.txt
-          cat review_output.txt
-
-      - name: Post review comment
-        uses: actions/github-script@v7
         with:
-          script: |
-            const fs = require('fs');
-            const reviewText = fs.readFileSync('review_output.txt', 'utf8');
-            const formattedReview = `## OpenCode AI Review 🤖\n\n${reviewText}`;
+          model: kimi-for-coding/k2p5
+          prompt: |
+            You are reviewing a pull request. Analyze the code changes and output your review in the following STRICT STRUCTURE:
+
+            ---
+
+            ## 📋 Summary
+            First, check if the PR description mentions any linked issues (e.g., "Closes #123", "Fixes #456", "Resolves #789"). 
             
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: formattedReview
-            });
+            If linked issues are found:
+            - Mention the issue number(s) explicitly
+            - Verify the PR actually implements what the issue(s) requested
+            - State whether the implementation fully satisfies the issue requirements
+            
+            Then provide 2-3 sentences summarizing the PR purpose, scope, and overall quality.
+
+            ## 🔴 Critical Issues (Must Fix - Blocks Merge)
+            Only issues that could cause crashes, security vulnerabilities, data loss, or major bugs.
+            
+            For each issue, use this exact format:
+            ```
+            **[CRITICAL]** `File:Line` - Issue Title
+            **Confidence:** High|Medium|Low (how sure you are this is a real problem)
+            **Description:** Clear explanation of the issue
+            **Impact:** What could go wrong if merged
+            **Suggested Fix:** Specific code changes needed
+            ```
+
+            ## ⚠️ High Priority Issues (Should Fix)
+            Significant code quality issues, potential bugs, or architectural problems.
+            
+            Same format as Critical, but with **[HIGH]** prefix.
+
+            ## 💡 Medium Priority Issues (Nice to Fix)
+            Style issues, minor optimizations, or code clarity improvements.
+            
+            Same format, with **[MEDIUM]** prefix.
+
+            ## ℹ️ Low Priority Suggestions (Optional)
+            Minor suggestions, documentation improvements, or subjective preferences.
+            
+            Same format, with **[LOW]** prefix.
+
+            ## 📊 SOLID Principles Score
+            | Principle | Score | Notes |
+            |-----------|-------|-------|
+            | Single Responsibility | 0-10 | Brief justification |
+            | Open/Closed | 0-10 | Brief justification |
+            | Liskov Substitution | 0-10 | Brief justification |
+            | Interface Segregation | 0-10 | Brief justification |
+            | Dependency Inversion | 0-10 | Brief justification |
+            | **Average** | **X.X** | |
+
+            ## 🎯 Final Assessment
+
+            ### Overall Confidence Score: XX%
+            Rate your confidence in this PR being ready to merge (0-100%).
+            **How to interpret:**
+            - 0-30%: Major concerns, do not merge without significant rework
+            - 31-60%: Moderate concerns, several issues need addressing
+            - 61-80%: Minor concerns, mostly ready with some fixes
+            - 81-100%: High confidence, ready to merge or with trivial fixes
+
+            ### Confidence Breakdown:
+            - **Code Quality:** XX% (how well-written is the code?)
+            - **Completeness:** XX% (does it fulfill requirements?)
+            - **Risk Level:** XX% (how risky is this change?)
+            - **Test Coverage:** XX% (are changes adequately tested?)
+
+            ### Merge Readiness:
+            - [ ] All critical issues resolved
+            - [ ] SOLID average score >= 6.0
+            - [ ] Overall confidence >= 60%
+            - [ ] No security concerns
+            - [ ] Tests present and passing (if applicable)
+
+            ### Verdict:
+            **MERGE** | **MERGE WITH FIXES** | **DO NOT MERGE**
+            
+            One-sentence explanation of the verdict.
+
+            ---
+
+            **Review Guidelines:**
+            1. Check the PR description for linked issues ("Fixes #123", "Closes #456", etc.) and verify the implementation
+            2. Be extremely specific with file paths and line numbers
+            3. Confidence scores should reflect how certain you are - use "Low" when unsure
+            4. If you have nothing meaningful to add to a section, write "None identified" instead of omitting it
+            5. Always provide actionable fixes, never just complaints
