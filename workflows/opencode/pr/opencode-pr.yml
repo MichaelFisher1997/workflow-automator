@@ -67,19 +67,22 @@ jobs:
           # Read the diff file
           DIFF_CONTENT=$(cat "$PR_DIFF")
           
-          # Build prompt using jq
-          jq -n \
-            --arg title "$PR_TITLE" \
-            --arg desc "$PR_DESCRIPTION" \
-            --arg previous "$PREVIOUS_COMMENTS" \
-            --arg diff "$DIFF_CONTENT" \
-            '{
-              model: "kimi-latest",
-              messages: [{
-                role: "user",
-                content: "You are an expert code reviewer. Review the following pull request:\n\nTitle: \($title)\n\nDescription: \($desc)\n\nPrevious Review Context:\n\($previous)\n\nCode Changes:\n\`\`\`diff\n\($diff)\n\`\`\`\n\nProvide a structured review with:\n1. Overall assessment (merge-ready, needs changes, etc.)\n2. Critical issues (if any)\n3. High-priority improvements\n4. Medium-priority suggestions\n5. Low-priority nitpicks\n6. Confidence score (0-100)\n\nFormat as markdown with clear headers."
-              }]
-            }' > prompt.json
+          # Build prompt using printf and jq
+          PROMPT=$(printf '%s\n\nTitle: %s\n\nDescription: %s\n\nPrevious Review Context:\n%s\n\nCode Changes:\n%s\n\nProvide a structured review with:\n1. Overall assessment (merge-ready, needs changes, etc.)\n2. Critical issues (if any)\n3. High-priority improvements\n4. Medium-priority suggestions\n5. Low-priority nitpicks\n6. Confidence score (0-100)\n\nFormat as markdown with clear headers.' \
+            "You are an expert code reviewer. Review the following pull request:" \
+            "$PR_TITLE" \
+            "$PR_DESCRIPTION" \
+            "$PREVIOUS_COMMENTS" \
+            "$DIFF_CONTENT")
+          
+          # Create JSON payload using jq
+          jq -n --arg content "$PROMPT" '{
+            model: "kimi-latest",
+            messages: [{
+              role: "user",
+              content: $content
+            }]
+          }' > prompt.json
           
           # Call OpenCode AI API
           curl -X POST https://api.opencode.ai/v1/chat/completions \
