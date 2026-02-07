@@ -6,13 +6,36 @@ import type {
   WorkflowType,
 } from '../models/workflow.js';
 import { parse as parseYaml } from 'yaml';
+import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const WORKFLOWS_ROOT = join(__dirname, '..', '..', 'workflows');
+
+// Try multiple possible locations for workflows directory
+// When bundled, __dirname might resolve differently
+function findWorkflowsRoot(): string {
+  // For development/build environment
+  const devPath = join(__dirname, '..', '..', 'workflows');
+  // For global npm/bun installs (when bundled into dist/)
+  const globalPath = join(__dirname, '..', '..', '..', 'workflows');
+  // For when running from package root
+  const rootPath = join(process.cwd(), 'workflows');
+  
+  // Try each path and return the first that exists
+  for (const path of [devPath, globalPath, rootPath]) {
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+  
+  // Default to dev path if none found (will fail gracefully later)
+  return devPath;
+}
+
+const WORKFLOWS_ROOT = findWorkflowsRoot();
 
 interface ParsedMetadata {
   id?: string;
