@@ -120,12 +120,19 @@ export function DetailPanel({
           <Text bold color={cyberpunkTheme.colors.text}>Variants:</Text>
           <Box marginLeft={2} flexDirection="column">
             {workflow.variants.map(v => (
-              <Box key={v.name}>
+              <Box key={v.name} flexDirection="column">
                 <Text 
                   color={v.name === selectedVariant ? cyberpunkTheme.colors.primary : cyberpunkTheme.colors.muted}
                   bold={v.name === selectedVariant}
+                  wrap="wrap"
                 >
-                  {v.name === selectedVariant ? '●' : '○'} {v.name} - {v.description}
+                  {v.name === selectedVariant ? '●' : '○'} {v.name}
+                </Text>
+                <Text 
+                  color={cyberpunkTheme.colors.muted}
+                  wrap="wrap"
+                >
+                  {'  '}{v.description}
                 </Text>
               </Box>
             ))}
