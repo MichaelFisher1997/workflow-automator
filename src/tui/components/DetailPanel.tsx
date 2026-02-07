@@ -117,25 +117,26 @@ export function DetailPanel({
         </Box>
 
         <Box marginY={1} flexDirection="column">
-          <Text bold color={cyberpunkTheme.colors.text}>Variants:</Text>
-          <Box marginLeft={2} flexDirection="column">
-            {workflow.variants.map(v => (
-              <Box key={v.name} flexDirection="column">
+          <Box flexDirection="row">
+            <Text bold color={cyberpunkTheme.colors.text}>Variants: </Text>
+            {workflow.variants.map((v, index) => (
+              <Box key={v.name} flexDirection="row">
                 <Text 
                   color={v.name === selectedVariant ? cyberpunkTheme.colors.primary : cyberpunkTheme.colors.muted}
                   bold={v.name === selectedVariant}
-                  wrap="wrap"
                 >
                   {v.name === selectedVariant ? '●' : '○'} {v.name}
                 </Text>
-                <Text 
-                  color={cyberpunkTheme.colors.muted}
-                  wrap="wrap"
-                >
-                  {'  '}{v.description}
-                </Text>
+                {index < workflow.variants.length - 1 && (
+                  <Text color={cyberpunkTheme.colors.muted}> | </Text>
+                )}
               </Box>
             ))}
+          </Box>
+          <Box marginLeft={2}>
+            <Text color={cyberpunkTheme.colors.muted}>
+              {workflow.variants.find(v => v.name === selectedVariant)?.description}
+            </Text>
           </Box>
           {workflow.variants.length > 1 && (
             <Box marginTop={1}>
