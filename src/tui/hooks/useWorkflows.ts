@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { WorkflowRegistry } from '../../core/registry.js';
 import type { Workflow } from '../../models/workflow.js';
 
@@ -57,7 +57,10 @@ export function useWorkflows(): UseWorkflowsReturn {
   }, [loadWorkflows]);
 
   // Filter workflows by selected category
-  const filteredWorkflows = workflows.filter(w => w.category.id === selectedCategory);
+  const filteredWorkflows = useMemo(
+    () => workflows.filter((workflow) => workflow.category.id === selectedCategory),
+    [workflows, selectedCategory],
+  );
 
   return {
     workflows: filteredWorkflows,

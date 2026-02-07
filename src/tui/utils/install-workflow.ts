@@ -28,9 +28,10 @@ export async function installWorkflow(
   const { targetPath = '.', force = false, dryRun = false } = options;
 
   try {
-    // Resolve target directory
-    const targetDir = resolve(targetPath, '.github/workflows');
-    const targetFile = join(targetDir, variant.filename);
+    const defaultRelativePath = join('.github', 'workflows', variant.filename);
+    const targetRelativePath = variant.installRelativePath ?? defaultRelativePath;
+    const targetFile = resolve(targetPath, targetRelativePath);
+    const targetDir = resolve(targetFile, '..');
 
     // Check if file already exists
     let exists = false;

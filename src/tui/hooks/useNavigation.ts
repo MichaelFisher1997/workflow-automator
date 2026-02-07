@@ -1,175 +1,157 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useInput } from 'ink';
-import type { Workflow } from '../../models/workflow.js';
+import type { VariantRow } from '../../models/workflow.js';
 
-interface NavigationState {
-  selectedIndex: number;
-  selectedVariant: string;
-  isHelpOpen: boolean;
-}
-
-interface UseNavigationReturn extends NavigationState {
-  // Actions
-  moveUp: () => void;
-  moveDown: () => void;
-  selectWorkflow: (index: number) => void;
-  nextVariant: () => void;
-  prevVariant: () => void;
-  toggleHelp: () => void;
-  closeHelp: () => void;
-  
-  // Computed
-  selectedWorkflow: Workflow | null;
+interface ConfirmOptions {
+  dryRun: boolean;
+  force: boolean;
 }
 
 interface UseNavigationOptions {
-  workflows: Workflow[];
-  onInstall?: (workflow: Workflow, variant: string) => void;
+  rows: VariantRow[];
+  onConfirm: (rows: VariantRow[], options: ConfirmOptions) => void | Promise<void>;
   onQuit?: () => void;
 }
 
-export function useNavigation({ 
-  workflows, 
-  onInstall, 
-  onQuit 
-}: UseNavigationOptions): UseNavigationReturn {
-  const [state, setState] = useState<NavigationState>({
-    selectedIndex: 0,
-    selectedVariant: 'standard',
-    isHelpOpen: false,
-  });
+export function useNavigation({ rows, onConfirm, onQuit }: UseNavigationOptions) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [dryRun, setDryRun] = useState(false);
+  const [force, setForce] = useState(false);
 
-  const moveUp = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      selectedIndex: Math.max(0, prev.selectedIndex - 1),
-    }));
-  }, []);
+  const selectedRow = rows[selectedIndex] ?? null;
 
-  const moveDown = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      selectedIndex: Math.min(workflows.length - 1, prev.selectedIndex + 1),
-    }));
-  }, [workflows.length]);
-
-  const selectWorkflow = useCallback((index: number) => {
-    setState(prev => ({
-      ...prev,
-      selectedIndex: Math.max(0, Math.min(workflows.length - 1, index)),
-    }));
-  }, [workflows.length]);
-
-  const nextVariant = useCallback(() => {
-    const workflow = workflows[state.selectedIndex];
-    if (!workflow) return;
-    
-    const variants = workflow.variants.map(v => v.name);
-    const currentIndex = variants.indexOf(state.selectedVariant);
-    const nextIndex = (currentIndex + 1) % variants.length;
-    const nextVariantName = variants[nextIndex];
-    if (!nextVariantName) return;
-    
-    setState(prev => ({
-      ...prev,
-      selectedVariant: nextVariantName,
-    }));
-  }, [workflows, state.selectedIndex, state.selectedVariant]);
-
-  const prevVariant = useCallback(() => {
-    const workflow = workflows[state.selectedIndex];
-    if (!workflow) return;
-    
-    const variants = workflow.variants.map(v => v.name);
-    const currentIndex = variants.indexOf(state.selectedVariant);
-    const prevIndex = (currentIndex - 1 + variants.length) % variants.length;
-    const prevVariantName = variants[prevIndex];
-    if (!prevVariantName) return;
-    
-    setState(prev => ({
-      ...prev,
-      selectedVariant: prevVariantName,
-    }));
-  }, [workflows, state.selectedIndex, state.selectedVariant]);
-
-  const toggleHelp = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      isHelpOpen: !prev.isHelpOpen,
-    }));
-  }, []);
-
-  const closeHelp = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      isHelpOpen: false,
-    }));
-  }, []);
-
-  // Reset variant when workflow changes
   useEffect(() => {
-    setState(prev => ({
-      ...prev,
-      selectedVariant: 'standard',
-    }));
-  }, [state.selectedIndex]);
+    if (rows.length === 0) {
+      setSelectedIndex(0);
+      return;
+    }
+    if (selectedIndex > rows.length - 1) {
+      setSelectedIndex(rows.length - 1);
+    }
+  }, [rows.length, selectedIndex]);
 
-  // Keyboard input handling
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedRowIds.has(row.id)),
+    [rows, selectedRowIds],
+  );
+
+  useEffect(() => {
+    setSelectedRowIds((previous) => {
+      const validIds = new Set(rows.map((row) => row.id));
+      const next = new Set<string>();
+      for (const id of previous) {
+        if (validIds.has(id)) next.add(id);
+      }
+      if (next.size === previous.size) {
+        let unchanged = true;
+        for (const id of next) {
+          if (!previous.has(id)) {
+            unchanged = false;
+            break;
+          }
+        }
+        if (unchanged) return previous;
+      }
+      return next;
+    });
+  }, [rows]);
+
+  const toggleSelectedRow = (rowId: string) => {
+    setSelectedRowIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(rowId)) {
+        next.delete(rowId);
+      } else {
+        next.add(rowId);
+      }
+      return next;
+    });
+  };
+
   useInput((input, key) => {
-    if (state.isHelpOpen) {
+    if (isHelpOpen) {
       if (key.escape || input === '?' || input === 'q') {
-        closeHelp();
+        setIsHelpOpen(false);
       }
       return;
     }
 
-    // Navigation
+    if (isConfirmOpen) {
+      if (key.escape) {
+        setIsConfirmOpen(false);
+      } else if (input === 'd') {
+        setDryRun((value) => !value);
+      } else if (input === 'f') {
+        setForce((value) => !value);
+      } else if (key.return) {
+        if (selectedRows.length > 0) {
+          void onConfirm(selectedRows, { dryRun, force });
+        }
+        setIsConfirmOpen(false);
+      }
+      return;
+    }
+
     if (key.upArrow || input === 'k') {
-      moveUp();
-    } else if (key.downArrow || input === 'j') {
-      moveDown();
-    } else if (input >= '1' && input <= '9') {
-      const index = parseInt(input) - 1;
-      if (index < workflows.length) {
-        selectWorkflow(index);
-      }
+      setSelectedIndex((index) => Math.max(0, index - 1));
+      return;
     }
 
-    // Variant switching
-    else if (key.tab) {
-      if (key.shift) {
-        prevVariant();
-      } else {
-        nextVariant();
-      }
+    if (key.downArrow || input === 'j') {
+      setSelectedIndex((index) => Math.min(rows.length - 1, index + 1));
+      return;
     }
 
-    // Actions
-    else if (key.return) {
-      const workflow = workflows[state.selectedIndex];
-      if (workflow && onInstall) {
-        onInstall(workflow, state.selectedVariant);
+    if (input >= '1' && input <= '9') {
+      const index = Number.parseInt(input, 10) - 1;
+      if (index >= 0 && index < rows.length) {
+        setSelectedIndex(index);
       }
-    } else if (input === '?') {
-      toggleHelp();
-    } else if (input === 'q' || (key.ctrl && input === 'c')) {
-      if (onQuit) {
-        onQuit();
+      return;
+    }
+
+    if (input === ' ') {
+      const row = rows[selectedIndex];
+      if (row) toggleSelectedRow(row.id);
+      return;
+    }
+
+    if (key.return) {
+      const row = rows[selectedIndex];
+      if (!row) return;
+
+      if (selectedRowIds.size === 0) {
+        toggleSelectedRow(row.id);
       }
+      setIsConfirmOpen(true);
+      return;
+    }
+
+    if (input === '?') {
+      setIsHelpOpen(true);
+      return;
+    }
+
+    if (input === 'q' || (key.ctrl && input === 'c')) {
+      onQuit?.();
     }
   });
 
-  const selectedWorkflow = workflows[state.selectedIndex] || null;
-
   return {
-    ...state,
-    selectedWorkflow,
-    moveUp,
-    moveDown,
-    selectWorkflow,
-    nextVariant,
-    prevVariant,
-    toggleHelp,
-    closeHelp,
+    selectedIndex,
+    selectedRow,
+    selectedRows,
+    selectedRowIds,
+    isHelpOpen,
+    isConfirmOpen,
+    dryRun,
+    force,
+    setIsHelpOpen,
+    setIsConfirmOpen,
+    setDryRun,
+    setForce,
   };
 }

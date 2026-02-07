@@ -40,9 +40,9 @@ workflow-automator
 |-----|--------|
 | `↑/↓` or `j/k` | Navigate workflows |
 | `←/→` or `h/l` | Switch category |
-| `1-9` | Jump to workflow # |
-| `Tab` | Switch variant (standard/nix) |
-| `Enter` | Install selected workflow |
+| `Space` | Select/unselect current variant row |
+| `Enter` | Open batch confirmation |
+| `D / F` | Toggle dry-run / force in confirmation modal |
 | `?` | Toggle help overlay |
 | `q` or `Ctrl+C` | Quit |
 
@@ -52,18 +52,18 @@ workflow-automator
 ┌─────────────────────────────────────────────────────────────────┐
 │  ⚡ WORKFLOW AUTOMATOR v1.0          Category: [opencode ▼]   │
 ├──────────────────┬──────────────────────────────────────────────┤
-│  🔍 Workflows    │  ┌─ Workflow Details ──────────────────────┐│
-│  [1] opencode-pr │  │  🔍 OpenCode AI PR Review               ││
-│  [2] opencode    │  │                                           ││
-│  [3] opencode-tri│  │  Type: set ✓ ready-to-run               ││
-│                  │  │  Variants: ● standard  ○ nix            ││
+│  🌲 Tree         │  ┌─ Workflow Details ──────────────────────┐│
+│  ▾ pr            │  │  🔍 OpenCode AI PR Review               ││
+│    [x] standard  │  │                                           ││
+│    [ ] nix       │  │  Category: opencode  Type: pr            ││
+│  ▾ triage        │  │  Variant: standard                        ││
 │                  │  │                                           ││
 │                  │  │  ⚠️  Secrets: KIMI_API_KEY              ││
 │                  │  │                                           ││
 │                  │  │  [Enter] Install (standard)             ││
 │                  │  └───────────────────────────────────────────┘│
 ├──────────────────┴──────────────────────────────────────────────┤
-│  [←/→] Category  [↑/↓] Navigate  [Tab] Variant  [Enter] Install │
+│  [←/→] Category [↑/↓] Navigate [Space] Select [Enter] Batch     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,9 +73,9 @@ workflow-automator
 
 | Workflow | Type | Variants | Description |
 |----------|------|----------|-------------|
-| `opencode/opencode-pr` | set | standard, nix | AI-powered PR code review |
+| `opencode/pr` | set | standard, nix | AI-powered PR code review |
 | `opencode/opencode` | set | standard, nix | Slash command handler (/oc) |
-| `opencode/opencode-triage` | set | standard | AI issue triage |
+| `opencode/triage` | set | standard | AI issue triage |
 
 ## Requirements
 

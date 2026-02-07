@@ -14,11 +14,11 @@ export function HelpOverlay({ onClose }: HelpOverlayProps) {
   });
 
   const shortcuts = [
-    { key: '↑/↓ or j/k', desc: 'Navigate workflows' },
+    { key: '↑/↓ or j/k', desc: 'Move cursor row' },
     { key: '←/→ or h/l', desc: 'Switch category' },
-    { key: '1-9', desc: 'Jump to workflow #' },
-    { key: 'Tab', desc: 'Switch variant' },
-    { key: 'Enter', desc: 'Install workflow' },
+    { key: 'Space', desc: 'Select/unselect row' },
+    { key: 'Enter', desc: 'Open batch confirmation' },
+    { key: 'D / F', desc: 'Dry-run / force in modal' },
     { key: '?', desc: 'Toggle this help' },
     { key: 'q', desc: 'Quit' },
   ];

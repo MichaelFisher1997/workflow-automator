@@ -26,6 +26,7 @@ export interface WorkflowVariant {
   name: string;
   filename: string;
   filepath: string;
+  installRelativePath?: string;
   toolchain: Toolchain;
   description: string;
 }
@@ -49,9 +50,18 @@ export interface Category {
 export interface Workflow {
   id: string;
   category: Category;
+  workflowType: string;
   type: WorkflowType;
   variants: WorkflowVariant[];
   metadata: WorkflowMetadata;
+}
+
+export interface VariantRow {
+  id: string;
+  categoryId: string;
+  workflowType: string;
+  workflow: Workflow;
+  variant: WorkflowVariant;
 }
 
 // Template-specific configuration (for future use)

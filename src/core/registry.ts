@@ -1,243 +1,289 @@
-import type { Workflow, WorkflowType, Toolchain, WorkflowMetadata, SecretRequirement, InputParameter, Trigger } from '../models/workflow.js';
+import type {
+  Category,
+  SecretRequirement,
+  Toolchain,
+  Workflow,
+  WorkflowType,
+} from '../models/workflow.js';
 import { parse as parseYaml } from 'yaml';
 import { readdir, readFile } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
 const WORKFLOWS_ROOT = join(__dirname, '..', '..', 'workflows');
 
 interface ParsedMetadata {
-  id: string;
-  category: string;
-  type: WorkflowType;
-  name: string;
-  description: string;
-  secrets: SecretRequirement[];
-  inputs: InputParameter[];
-  triggers: string[];
-  variants: Array<{ name: string; description: string }>;
+  id?: string;
+  category?: string;
+  type?: WorkflowType;
+  name?: string;
+  description?: string;
+  secrets?: SecretRequirement[];
+  triggers?: string[];
+  variants?: Array<{ name: string; description: string }>;
+  targetPath?: string;
 }
 
 export class WorkflowRegistry {
   private workflows: Map<string, Workflow> = new Map();
-  private categories: Map<string, { id: string; name: string; description: string; path: string }> = new Map();
+  private categories: Map<string, Category> = new Map();
 
   async load(): Promise<void> {
+    this.workflows.clear();
+    this.categories.clear();
+
     const categories = await this.discoverCategories();
-    
     for (const category of categories) {
       this.categories.set(category.id, category);
       const workflows = await this.discoverWorkflows(category);
-      
       for (const workflow of workflows) {
         this.workflows.set(workflow.id, workflow);
       }
     }
   }
 
-  private async discoverCategories(): Promise<Array<{ id: string; name: string; description: string; path: string }>> {
-    const categories: Array<{ id: string; name: string; description: string; path: string }> = [];
-    
-    try {
-      const entries = await readdir(WORKFLOWS_ROOT, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          categories.push({
-            id: entry.name,
-            name: this.formatCategoryName(entry.name),
-            description: '', // Could be loaded from a category.yaml file
-            path: join(WORKFLOWS_ROOT, entry.name)
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Failed to discover categories:', error);
+  private async discoverCategories(): Promise<Category[]> {
+    const categories: Category[] = [];
+    const entries = await readdir(WORKFLOWS_ROOT, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      categories.push({
+        id: entry.name,
+        name: this.formatCategoryName(entry.name),
+        description: '',
+        path: join(WORKFLOWS_ROOT, entry.name),
+      });
     }
-    
     return categories;
   }
 
-  private async discoverWorkflows(category: { id: string; path: string }): Promise<Workflow[]> {
-    const workflows: Workflow[] = [];
-    const typeDirs = ['sets', 'templates'];
-    
-    for (const type of typeDirs) {
-      const typePath = join(category.path, type);
-      
-      try {
-        const files = await readdir(typePath);
-        const yamlFiles = files.filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
-        
-        // Group files by base name (e.g., opencode.yml and opencode-nix.yml)
-        const groups = this.groupByBaseName(yamlFiles);
-        
-        for (const [baseName, files] of groups) {
-          const workflow = await this.parseWorkflow(category, type as WorkflowType, baseName, files, typePath);
-          if (workflow) {
-            workflows.push(workflow);
-          }
-        }
-      } catch (error) {
-        // Directory might not exist
-      }
-    }
-    
-    return workflows;
+  private async discoverWorkflows(category: Category): Promise<Workflow[]> {
+    const workflows = new Map<string, Workflow>();
+
+    await this.discoverNewHierarchy(category, workflows);
+    await this.discoverLegacyHierarchy(category, workflows);
+
+    return Array.from(workflows.values()).sort((a, b) =>
+      a.workflowType.localeCompare(b.workflowType),
+    );
   }
 
-  private groupByBaseName(files: string[]): Map<string, string[]> {
-    const groups = new Map<string, string[]>();
-    
-    for (const file of files) {
-      // Extract base name (e.g., "opencode-nix.yml" -> "opencode")
-      const match = file.match(/^(.+?)(?:-nix)?\.ya?ml$/);
-      if (match) {
-        const baseName = match[1];
-        if (!groups.has(baseName)) {
-          groups.set(baseName, []);
+  private async discoverNewHierarchy(category: Category, workflows: Map<string, Workflow>): Promise<void> {
+    const entries = await readdir(category.path, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name === 'sets' || entry.name === 'templates') continue;
+
+      const workflowType = entry.name;
+      const workflowPath = join(category.path, workflowType);
+      const files = await this.safeReadDir(workflowPath);
+      if (!files) continue;
+
+      const yamlFiles = files.filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'));
+      if (yamlFiles.length === 0) continue;
+
+      const grouped = this.groupByBaseName(yamlFiles);
+      for (const [baseName, variants] of grouped) {
+      const workflow = await this.parseWorkflow({
+          category,
+          workflowType,
+          type: 'set',
+          baseName,
+          files: variants,
+          rootPath: workflowPath,
+        });
+        if (workflow) {
+          workflows.set(workflow.id, workflow);
         }
-        groups.get(baseName)!.push(file);
       }
     }
-    
-    return groups;
   }
 
-  private async parseWorkflow(
-    category: { id: string; name: string; description: string; path: string },
-    typeDir: string,
-    baseName: string,
-    files: string[],
-    typePath: string
-  ): Promise<Workflow | null> {
-    // Determine workflow type from directory name
-    const type: WorkflowType = typeDir === 'sets' ? 'set' : 'template';
-    
-    // Find the non-nix file first (for metadata extraction)
-    const nonNixFile = files.find(f => !f.includes('-nix')) || files[0];
-    const content = await readFile(join(typePath, nonNixFile), 'utf-8');
+  private async discoverLegacyHierarchy(category: Category, workflows: Map<string, Workflow>): Promise<void> {
+    const typeDirs: Array<{ dir: string; type: WorkflowType }> = [
+      { dir: 'sets', type: 'set' },
+      { dir: 'templates', type: 'template' },
+    ];
+
+    for (const { dir, type } of typeDirs) {
+      const typePath = join(category.path, dir);
+      const files = await this.safeReadDir(typePath);
+      if (!files) continue;
+
+      const yamlFiles = files.filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'));
+      const grouped = this.groupByBaseName(yamlFiles);
+
+      for (const [baseName, variants] of grouped) {
+        const workflowType = this.deriveWorkflowType(baseName, category.id);
+        const workflowId = `${category.id}/${workflowType}`;
+        if (workflows.has(workflowId)) {
+          continue;
+        }
+
+        const workflow = await this.parseWorkflow({
+          category,
+          workflowType,
+          type,
+          baseName,
+          files: variants,
+          rootPath: typePath,
+        });
+        if (workflow) {
+          workflows.set(workflow.id, workflow);
+        }
+      }
+    }
+  }
+
+  private async parseWorkflow(args: {
+    category: Category;
+    workflowType: string;
+    type: WorkflowType;
+    baseName: string;
+    files: string[];
+    rootPath: string;
+  }): Promise<Workflow | null> {
+    const nonNixFile = args.files.find((file) => !file.includes('-nix')) ?? args.files[0];
+    if (!nonNixFile) return null;
+
+    const content = await readFile(join(args.rootPath, nonNixFile), 'utf-8');
     const metadata = this.extractMetadata(content, nonNixFile);
-    
-    if (!metadata) {
-      return null;
-    }
 
-    // Build variants
-    const variants = files.map(file => {
-      const isNix = file.includes('-nix');
-      const variantName = isNix ? 'nix' : 'standard';
-      const variantMeta = metadata.variants.find(v => v.name === variantName);
-      
-      return {
-        name: variantName,
-        filename: file,
-        filepath: join(typePath, file),
-        toolchain: isNix ? 'nix' as Toolchain : 'standard' as Toolchain,
-        description: variantMeta?.description || (isNix ? 'Uses Nix for reproducible environment' : 'Uses standard GitHub Actions')
-      };
-    });
+    const resolvedType: WorkflowType = metadata.type ?? args.type;
 
-    // Use the base name for the ID (without -nix suffix)
-    const workflowId = `${category.id}/${baseName}`;
+    const variants = args.files
+      .map((file) => {
+        const isNix = file.includes('-nix');
+        const variantName = isNix ? 'nix' : 'standard';
+        const variantMeta = metadata.variants?.find((variant) => variant.name === variantName);
+        return {
+          name: variantName,
+          filename: file,
+          filepath: join(args.rootPath, file),
+          installRelativePath: metadata.targetPath,
+          toolchain: (isNix ? 'nix' : 'standard') as Toolchain,
+          description:
+            variantMeta?.description ??
+            (isNix ? 'Uses Nix for reproducible environment' : 'Uses standard GitHub Actions'),
+        };
+      })
+      .sort((a, b) => Number(a.name === 'nix') - Number(b.name === 'nix'));
+
+    const workflowId = `${args.category.id}/${args.workflowType}`;
 
     return {
       id: workflowId,
-      category,
-      type,
+      category: args.category,
+      workflowType: args.workflowType,
+      type: resolvedType,
       variants,
       metadata: {
-        name: metadata.name?.replace(/ \(Nix\)$/, '') || baseName,
-        description: metadata.description?.replace(/ using Nix$/, '') || '',
-        secrets: metadata.secrets || [],
-        inputs: metadata.inputs || [],
-        triggers: (metadata.triggers || []).map(t => ({ event: t })),
-        estimatedSetupTime: '0 minutes'
-      }
+        name: metadata.name ?? this.formatCategoryName(args.workflowType),
+        description: metadata.description ?? '',
+        secrets: metadata.secrets ?? [],
+        inputs: [],
+        triggers: (metadata.triggers ?? []).map((event) => ({ event })),
+        estimatedSetupTime: '0 minutes',
+      },
     };
   }
 
-  private extractMetadata(content: string, filename: string): ParsedMetadata | null {
-    // Look for YAML frontmatter
+  private extractMetadata(content: string, filename: string): ParsedMetadata {
     const match = content.match(/^# ---\n([\s\S]*?)\n# ---/);
     if (!match) {
-      // Try to extract from inline comments
       return this.extractInlineMetadata(content, filename);
     }
 
-    const yamlContent = match[1].replace(/^# /gm, '').replace(/^#/gm, '');
-    
+    const yamlBlock = match[1] ?? '';
+    const yamlContent = yamlBlock.replace(/^#\s?/gm, '');
     try {
-      const parsed = parseYaml(yamlContent) as ParsedMetadata;
-      return parsed;
-    } catch (error) {
-      console.error(`Failed to parse metadata from ${filename}:`, error);
-      return null;
+      return (parseYaml(yamlContent) as ParsedMetadata) ?? {};
+    } catch {
+      return this.extractInlineMetadata(content, filename);
     }
   }
 
-  private extractInlineMetadata(content: string, filename: string): ParsedMetadata | null {
-    // Extract metadata from inline comments
+  private extractInlineMetadata(content: string, filename: string): ParsedMetadata {
     const idMatch = content.match(/# id:\s*(.+)/);
     const categoryMatch = content.match(/# category:\s*(.+)/);
     const typeMatch = content.match(/# type:\s*(.+)/);
     const nameMatch = content.match(/# name:\s*(.+)/);
-    const descMatch = content.match(/# description:\s*(.+)/);
+    const descriptionMatch = content.match(/# description:\s*(.+)/);
+    const triggerMatch = content.match(/# triggers:\s*\[([^\]]+)]/);
+    const targetPathMatch = content.match(/# targetPath:\s*(.+)/);
 
-    if (!idMatch) return null;
-
-    // Extract secrets
-    const secrets: SecretRequirement[] = [];
-    const secretsMatch = content.match(/# secrets:[\s\S]*?(?=\n# [a-z]|\n\n|$)/);
-    if (secretsMatch) {
-      const secretMatches = secretsMatch[0].matchAll(/#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*(.+)/g);
-      for (const m of secretMatches) {
-        secrets.push({
-          name: m[1],
-          description: m[2].trim(),
-          required: true
-        });
+    const variants: Array<{ name: string; description: string }> = [];
+    const variantsBlock = content.match(/# variants:[\s\S]*?(?=\n# [a-z]|\n\n|$)/i);
+    if (variantsBlock) {
+      const regex = /#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*(.+)/g;
+      for (const item of variantsBlock[0].matchAll(regex)) {
+        const name = item[1];
+        const description = item[2];
+        if (!name || !description) continue;
+        variants.push({ name, description: description.trim() });
       }
     }
 
-    // Extract triggers
-    const triggers: string[] = [];
-    const triggersMatch = content.match(/# triggers:\s*\[([^\]]+)\]/);
-    if (triggersMatch) {
-      triggers.push(...triggersMatch[1].split(',').map(t => t.trim()));
-    }
-
-    // Extract variants
-    const variants: Array<{ name: string; description: string }> = [];
-    const variantsMatch = content.match(/# variants:[\s\S]*?(?=\n# [a-z]|\n\n|$)/);
-    if (variantsMatch) {
-      const variantMatches = variantsMatch[0].matchAll(/#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*(.+)/g);
-      for (const m of variantMatches) {
-        variants.push({
-          name: m[1],
-          description: m[2].trim()
-        });
+    const secrets: SecretRequirement[] = [];
+    const secretsBlock = content.match(/# secrets:[\s\S]*?(?=\n# [a-z]|\n\n|$)/i);
+    if (secretsBlock) {
+      const regex = /#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*(.+)/g;
+      for (const item of secretsBlock[0].matchAll(regex)) {
+        const name = item[1];
+        const description = item[2];
+        if (!name || !description) continue;
+        secrets.push({ name, description: description.trim(), required: true });
       }
     }
 
     return {
-      id: idMatch[1].trim(),
-      category: categoryMatch?.[1].trim() || '',
-      type: (typeMatch?.[1].trim() as WorkflowType) || 'set',
-      name: nameMatch?.[1].trim() || filename.replace('.yml', ''),
-      description: descMatch?.[1].trim() || '',
+      id: idMatch?.[1]?.trim(),
+      category: categoryMatch?.[1]?.trim(),
+      type: (typeMatch?.[1]?.trim() as WorkflowType | undefined) ?? 'set',
+      name: nameMatch?.[1]?.trim() ?? filename.replace(/\.ya?ml$/, ''),
+      description: descriptionMatch?.[1]?.trim(),
       secrets,
-      inputs: [],
-      triggers,
-      variants
+      triggers: triggerMatch?.[1]?.split(',').map((entry) => entry.trim()) ?? [],
+      targetPath: targetPathMatch?.[1]?.trim(),
+      variants,
     };
   }
 
+  private groupByBaseName(files: string[]): Map<string, string[]> {
+    const groups = new Map<string, string[]>();
+    for (const file of files) {
+      const match = file.match(/^(.+?)(?:-nix)?\.ya?ml$/);
+      const baseName = match?.[1];
+      if (!baseName) continue;
+      if (!groups.has(baseName)) groups.set(baseName, []);
+      groups.get(baseName)?.push(file);
+    }
+    return groups;
+  }
+
+  private deriveWorkflowType(baseName: string, categoryId: string): string {
+    if (baseName === categoryId) return categoryId;
+    if (baseName.startsWith(`${categoryId}-`)) {
+      return baseName.slice(categoryId.length + 1);
+    }
+    return baseName;
+  }
+
   private formatCategoryName(id: string): string {
-    return id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return id
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  private async safeReadDir(path: string): Promise<string[] | null> {
+    try {
+      return await readdir(path);
+    } catch {
+      return null;
+    }
   }
 
   getWorkflows(): Workflow[] {
@@ -248,19 +294,15 @@ export class WorkflowRegistry {
     return this.workflows.get(id);
   }
 
-  getCategories(): Array<{ id: string; name: string; description: string; path: string }> {
+  getCategories(): Category[] {
     return Array.from(this.categories.values());
   }
 
-  filterWorkflows(options: {
-    category?: string;
-    type?: WorkflowType;
-    variant?: string;
-  }): Workflow[] {
-    return this.getWorkflows().filter(w => {
-      if (options.category && w.category.id !== options.category) return false;
-      if (options.type && w.type !== options.type) return false;
-      if (options.variant && !w.variants.some(v => v.name === options.variant)) return false;
+  filterWorkflows(options: { category?: string; type?: WorkflowType; variant?: string }): Workflow[] {
+    return this.getWorkflows().filter((workflow) => {
+      if (options.category && workflow.category.id !== options.category) return false;
+      if (options.type && workflow.type !== options.type) return false;
+      if (options.variant && !workflow.variants.some((variant) => variant.name === options.variant)) return false;
       return true;
     });
   }

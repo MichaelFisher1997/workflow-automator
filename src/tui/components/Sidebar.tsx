@@ -1,15 +1,17 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import type { VariantRow, Workflow } from '../../models/workflow.js';
 import { cyberpunkTheme } from '../theme/cyberpunk.js';
-import type { Workflow } from '../../models/workflow.js';
 
 interface SidebarProps {
   workflows: Workflow[];
-  selectedIndex: number;
+  rows: VariantRow[];
+  selectedRowId: string | null;
+  selectedRowIds: Set<string>;
   sidebarWidth: number;
 }
 
-export function Sidebar({ workflows, selectedIndex, sidebarWidth }: SidebarProps) {
+export function Sidebar({ workflows, rows, selectedRowId, selectedRowIds, sidebarWidth }: SidebarProps) {
   return (
     <Box
       width={sidebarWidth}
@@ -20,57 +22,43 @@ export function Sidebar({ workflows, selectedIndex, sidebarWidth }: SidebarProps
     >
       <Box marginBottom={1}>
         <Text bold color={cyberpunkTheme.colors.primary}>
-          🔍 Workflows ({workflows.length})
+          🌲 Tree ({rows.length} variants)
         </Text>
       </Box>
-      
+
       <Box flexDirection="column" flexGrow={1}>
-        {workflows.map((workflow, index) => {
-          const isSelected = index === selectedIndex;
-          const hasSecrets = workflow.metadata.secrets.length > 0;
-          const variantCount = workflow.variants.length;
-          
-          return (
-            <Box 
-              key={workflow.id}
-              marginY={0}
-              paddingX={1}
-            >
-              <Box flexDirection="column">
-                <Box>
-                  <Text color={cyberpunkTheme.colors.muted}>
-                    [{index + 1}]
-                  </Text>
-                  <Text 
-                    color={isSelected ? cyberpunkTheme.colors.bright : cyberpunkTheme.colors.text}
-                    bold={isSelected}
-                  >
-                    {' '}{workflow.metadata.name}
-                  </Text>
-                </Box>
-                
-                {isSelected && (
-                  <Box paddingLeft={4}>
-                    <Text color={cyberpunkTheme.colors.success}>
-                      set ✓
+        {workflows.map((workflow) => (
+          <Box key={workflow.id} flexDirection="column" marginBottom={1}>
+            <Text color={cyberpunkTheme.colors.info}>
+              ▾ {workflow.workflowType}{' '}
+              <Text color={workflow.type === 'template' ? cyberpunkTheme.colors.warning : cyberpunkTheme.colors.success}>
+                ({workflow.type})
+              </Text>
+            </Text>
+            <Box flexDirection="column" paddingLeft={2}>
+              {workflow.variants.map((variant) => {
+                const rowId = `${workflow.id}:${variant.name}`;
+                const isCursor = selectedRowId === rowId;
+                const isChecked = selectedRowIds.has(rowId);
+                return (
+                  <Box key={rowId}>
+                    <Text color={isChecked ? cyberpunkTheme.colors.success : cyberpunkTheme.colors.muted}>
+                      [{isChecked ? 'x' : ' '}]
                     </Text>
-                    {variantCount > 1 && (
-                      <Text color={cyberpunkTheme.colors.info}>
-                        {' '}std 🟢{variantCount > 1 ? ` nix 🔵` : ''}
-                      </Text>
-                    )}
-                    {hasSecrets && (
-                      <Text color={cyberpunkTheme.colors.warning}>
-                        {' '}⚠️ {workflow.metadata.secrets.length} secret
-                      </Text>
-                    )}
+                    <Text color={isCursor ? cyberpunkTheme.colors.bright : cyberpunkTheme.colors.text} bold={isCursor}>
+                      {' '}
+                      {variant.name}
+                    </Text>
+                    {isCursor ? <Text color={cyberpunkTheme.colors.secondary}> ←</Text> : null}
                   </Box>
-                )}
-              </Box>
+                );
+              })}
             </Box>
-          );
-        })}
+          </Box>
+        ))}
       </Box>
+
+      <Text color={cyberpunkTheme.colors.muted}>{selectedRowIds.size} selected</Text>
     </Box>
   );
 }
