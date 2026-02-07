@@ -1,0 +1,24 @@
+# ---
+# id: dependabot/dependabot
+# category: dependabot
+# type: template
+# name: Dependabot Configuration
+# description: Java Maven Dependabot config
+# targetPath: .github/dependabot.yml
+# secrets: []
+# inputs: []
+# triggers: []
+# variants:
+#   - name: java
+#     description: Java Maven config
+# ---
+
+version: 2
+updates:
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "java"

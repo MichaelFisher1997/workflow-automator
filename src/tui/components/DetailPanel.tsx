@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
+import { readFile } from 'node:fs/promises';
 import type { VariantRow } from '../../models/workflow.js';
 import { cyberpunkTheme } from '../theme/cyberpunk.js';
 
@@ -11,6 +12,36 @@ interface DetailPanelProps {
 }
 
 export function DetailPanel({ row, detailWidth, selectedCount, batchMessage }: DetailPanelProps) {
+  const [previewLines, setPreviewLines] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPreview() {
+      if (!row) {
+        setPreviewLines([]);
+        return;
+      }
+
+      try {
+        const content = await readFile(row.variant.filepath, 'utf-8');
+        const lines = content.split('\n').slice(0, 12);
+        if (active) {
+          setPreviewLines(lines);
+        }
+      } catch {
+        if (active) {
+          setPreviewLines(['(preview unavailable)']);
+        }
+      }
+    }
+
+    void loadPreview();
+    return () => {
+      active = false;
+    };
+  }, [row]);
+
   if (!row) {
     return (
       <Box
@@ -49,18 +80,22 @@ export function DetailPanel({ row, detailWidth, selectedCount, batchMessage }: D
           </Text>
         </Box>
 
+        <Box marginTop={1}>
+          <Text color={cyberpunkTheme.colors.text}>
+            Install path:{' '}
+            <Text color={cyberpunkTheme.colors.info}>{row.variant.installRelativePath ?? `.github/workflows/${row.variant.filename}`}</Text>
+          </Text>
+        </Box>
+
         <Box marginTop={1} flexDirection="column">
-          <Text color={cyberpunkTheme.colors.text}>Available variants:</Text>
-          <Box paddingLeft={2} flexDirection="column">
-            {row.workflow.variants.map((variant) => (
-              <Text
-                key={variant.name}
-                color={variant.name === row.variant.name ? cyberpunkTheme.colors.primary : cyberpunkTheme.colors.muted}
-                bold={variant.name === row.variant.name}
-              >
-                {variant.name === row.variant.name ? '●' : '○'} {variant.name}
+          <Text color={cyberpunkTheme.colors.text}>Preview:</Text>
+          <Box borderStyle="single" borderColor={cyberpunkTheme.colors.border} paddingX={1} flexDirection="column">
+            {previewLines.map((line, index) => (
+              <Text key={`${index}-${line}`} color={cyberpunkTheme.colors.muted}>
+                {line === '' ? ' ' : line}
               </Text>
             ))}
+            <Text color={cyberpunkTheme.colors.muted}>...</Text>
           </Box>
         </Box>
 

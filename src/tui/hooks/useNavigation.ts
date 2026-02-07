@@ -8,12 +8,13 @@ interface ConfirmOptions {
 }
 
 interface UseNavigationOptions {
-  rows: VariantRow[];
+  visibleRows: VariantRow[];
+  allRows: VariantRow[];
   onConfirm: (rows: VariantRow[], options: ConfirmOptions) => void | Promise<void>;
   onQuit?: () => void;
 }
 
-export function useNavigation({ rows, onConfirm, onQuit }: UseNavigationOptions) {
+export function useNavigation({ visibleRows, allRows, onConfirm, onQuit }: UseNavigationOptions) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -21,26 +22,26 @@ export function useNavigation({ rows, onConfirm, onQuit }: UseNavigationOptions)
   const [dryRun, setDryRun] = useState(false);
   const [force, setForce] = useState(false);
 
-  const selectedRow = rows[selectedIndex] ?? null;
+  const selectedRow = visibleRows[selectedIndex] ?? null;
 
   useEffect(() => {
-    if (rows.length === 0) {
+    if (visibleRows.length === 0) {
       setSelectedIndex(0);
       return;
     }
-    if (selectedIndex > rows.length - 1) {
-      setSelectedIndex(rows.length - 1);
+    if (selectedIndex > visibleRows.length - 1) {
+      setSelectedIndex(visibleRows.length - 1);
     }
-  }, [rows.length, selectedIndex]);
+  }, [visibleRows.length, selectedIndex]);
 
   const selectedRows = useMemo(
-    () => rows.filter((row) => selectedRowIds.has(row.id)),
-    [rows, selectedRowIds],
+    () => allRows.filter((row) => selectedRowIds.has(row.id)),
+    [allRows, selectedRowIds],
   );
 
   useEffect(() => {
     setSelectedRowIds((previous) => {
-      const validIds = new Set(rows.map((row) => row.id));
+      const validIds = new Set(allRows.map((row) => row.id));
       const next = new Set<string>();
       for (const id of previous) {
         if (validIds.has(id)) next.add(id);
@@ -57,7 +58,7 @@ export function useNavigation({ rows, onConfirm, onQuit }: UseNavigationOptions)
       }
       return next;
     });
-  }, [rows]);
+  }, [allRows]);
 
   const toggleSelectedRow = (rowId: string) => {
     setSelectedRowIds((previous) => {
@@ -95,32 +96,43 @@ export function useNavigation({ rows, onConfirm, onQuit }: UseNavigationOptions)
       return;
     }
 
+    if (visibleRows.length === 0) {
+      if (input === '?') {
+        setIsHelpOpen(true);
+        return;
+      }
+      if (input === 'q' || (key.ctrl && input === 'c')) {
+        onQuit?.();
+      }
+      return;
+    }
+
     if (key.upArrow || input === 'k') {
       setSelectedIndex((index) => Math.max(0, index - 1));
       return;
     }
 
     if (key.downArrow || input === 'j') {
-      setSelectedIndex((index) => Math.min(rows.length - 1, index + 1));
+      setSelectedIndex((index) => Math.min(visibleRows.length - 1, index + 1));
       return;
     }
 
     if (input >= '1' && input <= '9') {
       const index = Number.parseInt(input, 10) - 1;
-      if (index >= 0 && index < rows.length) {
+      if (index >= 0 && index < visibleRows.length) {
         setSelectedIndex(index);
       }
       return;
     }
 
     if (input === ' ') {
-      const row = rows[selectedIndex];
+      const row = visibleRows[selectedIndex];
       if (row) toggleSelectedRow(row.id);
       return;
     }
 
     if (key.return) {
-      const row = rows[selectedIndex];
+      const row = visibleRows[selectedIndex];
       if (!row) return;
 
       if (selectedRowIds.size === 0) {

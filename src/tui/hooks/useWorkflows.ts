@@ -3,6 +3,7 @@ import { WorkflowRegistry } from '../../core/registry.js';
 import type { Workflow } from '../../models/workflow.js';
 
 interface UseWorkflowsReturn {
+  allWorkflows: Workflow[];
   workflows: Workflow[];
   categories: string[];
   selectedCategory: string;
@@ -63,6 +64,7 @@ export function useWorkflows(): UseWorkflowsReturn {
   );
 
   return {
+    allWorkflows: workflows,
     workflows: filteredWorkflows,
     categories,
     selectedCategory,

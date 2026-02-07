@@ -1,0 +1,24 @@
+# ---
+# id: dependabot/dependabot
+# category: dependabot
+# type: template
+# name: Dependabot Configuration
+# description: Python pip Dependabot config
+# targetPath: .github/dependabot.yml
+# secrets: []
+# inputs: []
+# triggers: []
+# variants:
+#   - name: python
+#     description: Python pip config
+# ---
+
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "python"

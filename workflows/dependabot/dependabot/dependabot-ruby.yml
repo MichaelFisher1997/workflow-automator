@@ -1,0 +1,24 @@
+# ---
+# id: dependabot/dependabot
+# category: dependabot
+# type: template
+# name: Dependabot Configuration
+# description: Ruby Bundler Dependabot config
+# targetPath: .github/dependabot.yml
+# secrets: []
+# inputs: []
+# triggers: []
+# variants:
+#   - name: ruby
+#     description: Ruby bundler config
+# ---
+
+version: 2
+updates:
+  - package-ecosystem: "bundler"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ruby"

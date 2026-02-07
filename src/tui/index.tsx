@@ -20,10 +20,10 @@ function App() {
   const [batchMessage, setBatchMessage] = useState<string | null>(null);
 
   const { width, height, sidebarWidth, isValid } = useTerminalSize();
-  const { workflows, categories, selectedCategory, isLoading, error, setCategory } = useWorkflows();
+  const { allWorkflows, workflows, categories, selectedCategory, isLoading, error, setCategory } = useWorkflows();
 
-  const rows = useMemo<VariantRow[]>(() => {
-    return workflows.flatMap((workflow) =>
+  const allRows = useMemo<VariantRow[]>(() => {
+    return allWorkflows.flatMap((workflow) =>
       workflow.variants.map((variant) => ({
         id: `${workflow.id}:${variant.name}`,
         categoryId: workflow.category.id,
@@ -32,12 +32,18 @@ function App() {
         variant,
       })),
     );
-  }, [workflows]);
+  }, [allWorkflows]);
+
+  const visibleRows = useMemo(
+    () => allRows.filter((row) => row.categoryId === selectedCategory),
+    [allRows, selectedCategory],
+  );
 
   const handleQuit = () => exit();
 
   const nav = useNavigation({
-    rows,
+    visibleRows,
+    allRows,
     onQuit: handleQuit,
     onConfirm: async (selectedRows, options) => {
       if (selectedRows.length === 0) return;
@@ -104,24 +110,35 @@ function App() {
         categories={categories}
         selectedCategory={selectedCategory}
         onCategoryChange={setCategory}
-        workflowCount={rows.length}
+        workflowCount={visibleRows.length}
       />
 
       <Box flexDirection="row" flexGrow={1}>
-        <Sidebar
-          workflows={workflows}
-          rows={rows}
-          selectedRowId={nav.selectedRow?.id ?? null}
-          selectedRowIds={nav.selectedRowIds}
-          sidebarWidth={sidebarWidth}
-        />
+        {nav.isConfirmOpen ? (
+          <ConfirmModal
+            selectedCount={nav.selectedRows.length}
+            selectedRows={nav.selectedRows}
+            dryRun={nav.dryRun}
+            force={nav.force}
+          />
+        ) : (
+          <>
+            <Sidebar
+              workflows={workflows}
+              rows={visibleRows}
+              selectedRowId={nav.selectedRow?.id ?? null}
+              selectedRowIds={nav.selectedRowIds}
+              sidebarWidth={sidebarWidth}
+            />
 
-        <DetailPanel
-          row={nav.selectedRow}
-          detailWidth={detailWidth}
-          selectedCount={nav.selectedRows.length}
-          batchMessage={batchMessage}
-        />
+            <DetailPanel
+              row={nav.selectedRow}
+              detailWidth={detailWidth}
+              selectedCount={nav.selectedRows.length}
+              batchMessage={batchMessage}
+            />
+          </>
+        )}
       </Box>
 
       <Box height={1} borderStyle="single" borderColor={cyberpunkTheme.colors.border} paddingX={1}>
@@ -131,9 +148,6 @@ function App() {
       </Box>
 
       {nav.isHelpOpen ? <HelpOverlay onClose={() => nav.setIsHelpOpen(false)} /> : null}
-      {nav.isConfirmOpen ? (
-        <ConfirmModal selectedCount={nav.selectedRows.length} dryRun={nav.dryRun} force={nav.force} />
-      ) : null}
     </Box>
   );
 }

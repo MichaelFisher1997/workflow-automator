@@ -1,0 +1,24 @@
+# ---
+# id: dependabot/dependabot
+# category: dependabot
+# type: template
+# name: Dependabot Configuration
+# description: .NET NuGet Dependabot config
+# targetPath: .github/dependabot.yml
+# secrets: []
+# inputs: []
+# triggers: []
+# variants:
+#   - name: dotnet
+#     description: .NET NuGet config
+# ---
+
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "dotnet"

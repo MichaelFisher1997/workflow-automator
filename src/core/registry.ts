@@ -86,7 +86,7 @@ export class WorkflowRegistry {
 
       const grouped = this.groupByBaseName(yamlFiles);
       for (const [baseName, variants] of grouped) {
-      const workflow = await this.parseWorkflow({
+        const workflow = await this.parseWorkflow({
           category,
           workflowType,
           type: 'set',
@@ -142,21 +142,25 @@ export class WorkflowRegistry {
     workflowType: string;
     type: WorkflowType;
     baseName: string;
-    files: string[];
+    files: Array<{ file: string; variantName: string }>;
     rootPath: string;
   }): Promise<Workflow | null> {
-    const nonNixFile = args.files.find((file) => !file.includes('-nix')) ?? args.files[0];
-    if (!nonNixFile) return null;
+    const standardEntry = args.files.find((entry) => entry.variantName === 'standard');
+    const metadataEntry = standardEntry ?? args.files[0];
+    if (!metadataEntry) return null;
 
-    const content = await readFile(join(args.rootPath, nonNixFile), 'utf-8');
-    const metadata = this.extractMetadata(content, nonNixFile);
+    const metadataFile = metadataEntry.file;
+
+    const content = await readFile(join(args.rootPath, metadataFile), 'utf-8');
+    const metadata = this.extractMetadata(content, metadataFile);
 
     const resolvedType: WorkflowType = metadata.type ?? args.type;
 
     const variants = args.files
-      .map((file) => {
-        const isNix = file.includes('-nix');
-        const variantName = isNix ? 'nix' : 'standard';
+      .map((entry) => {
+        const file = entry.file;
+        const variantName = entry.variantName;
+        const isNix = variantName === 'nix';
         const variantMeta = metadata.variants?.find((variant) => variant.name === variantName);
         return {
           name: variantName,
@@ -169,7 +173,10 @@ export class WorkflowRegistry {
             (isNix ? 'Uses Nix for reproducible environment' : 'Uses standard GitHub Actions'),
         };
       })
-      .sort((a, b) => Number(a.name === 'nix') - Number(b.name === 'nix'));
+      .sort((a, b) => {
+        const weight = this.variantSortWeight(a.name) - this.variantSortWeight(b.name);
+        return weight !== 0 ? weight : a.name.localeCompare(b.name);
+      });
 
     const workflowId = `${args.category.id}/${args.workflowType}`;
 
@@ -251,16 +258,37 @@ export class WorkflowRegistry {
     };
   }
 
-  private groupByBaseName(files: string[]): Map<string, string[]> {
-    const groups = new Map<string, string[]>();
+  private groupByBaseName(files: string[]): Map<string, Array<{ file: string; variantName: string }>> {
+    const groups = new Map<string, Array<{ file: string; variantName: string }>>();
+    const names = new Set(files.map((file) => file.replace(/\.ya?ml$/, '')));
+
     for (const file of files) {
-      const match = file.match(/^(.+?)(?:-nix)?\.ya?ml$/);
-      const baseName = match?.[1];
-      if (!baseName) continue;
+      const name = file.replace(/\.ya?ml$/, '');
+      const dashIndex = name.lastIndexOf('-');
+
+      let baseName = name;
+      let variantName = 'standard';
+
+      if (dashIndex > 0) {
+        const candidateBase = name.slice(0, dashIndex);
+        const candidateVariant = name.slice(dashIndex + 1);
+        if (names.has(candidateBase) && candidateVariant.length > 0) {
+          baseName = candidateBase;
+          variantName = candidateVariant;
+        }
+      }
+
       if (!groups.has(baseName)) groups.set(baseName, []);
-      groups.get(baseName)?.push(file);
+      groups.get(baseName)?.push({ file, variantName });
     }
+
     return groups;
+  }
+
+  private variantSortWeight(name: string): number {
+    if (name === 'standard') return 0;
+    if (name === 'nix') return 99;
+    return 10;
   }
 
   private deriveWorkflowType(baseName: string, categoryId: string): string {

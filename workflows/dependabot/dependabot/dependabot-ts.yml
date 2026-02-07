@@ -1,0 +1,24 @@
+# ---
+# id: dependabot/dependabot
+# category: dependabot
+# type: template
+# name: Dependabot Configuration
+# description: TypeScript npm-focused Dependabot config
+# targetPath: .github/dependabot.yml
+# secrets: []
+# inputs: []
+# triggers: []
+# variants:
+#   - name: ts
+#     description: TypeScript npm-focused config
+# ---
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "typescript"
