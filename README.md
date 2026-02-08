@@ -13,16 +13,7 @@ Interactive TUI for installing curated GitHub Actions workflows with a cyberpunk
 
 ## Installation
 
-### Option 1: Clone and run locally (recommended for now)
-
-```bash
-git clone https://github.com/openstaticfish/actionflow.git
-cd actionflow
-bun install
-bun run src/tui/index.tsx
-```
-
-### Option 2: Install from GitHub
+### Option 1: Install from GitHub (Recommended)
 
 ```bash
 # Install globally from GitHub
@@ -34,6 +25,15 @@ git clone https://github.com/openstaticfish/actionflow.git
 cd actionflow
 bun link
 actionflow  # Available globally
+```
+
+### Option 2: Clone and run locally
+
+```bash
+git clone https://github.com/openstaticfish/actionflow.git
+cd actionflow
+bun install
+bun run src/tui/index.tsx
 ```
 
 ### Option 3: NPM (coming soon)
