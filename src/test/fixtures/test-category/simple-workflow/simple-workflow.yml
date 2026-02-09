@@ -1,0 +1,27 @@
+# ---
+# id: test-category/simple-workflow
+# category: test-category
+# type: set
+# name: Simple Test Workflow
+# description: A simple test workflow for unit testing
+# targetPath: .github/workflows/simple.yml
+# secrets:
+#   - name: TEST_SECRET
+#     description: A test secret
+# triggers:
+#   - push
+#   - pull_request
+# variants:
+#   - name: standard
+#     description: Standard version
+#   - name: nix
+#     description: Nix version
+# ---
+
+name: Simple Test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4

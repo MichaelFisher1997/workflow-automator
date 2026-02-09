@@ -37,7 +37,7 @@ function findWorkflowsRoot(): string {
 
 const WORKFLOWS_ROOT = findWorkflowsRoot();
 
-interface ParsedMetadata {
+export interface ParsedMetadata {
   id?: string;
   category?: string;
   type?: WorkflowType;
@@ -52,6 +52,11 @@ interface ParsedMetadata {
 export class WorkflowRegistry {
   private workflows: Map<string, Workflow> = new Map();
   private categories: Map<string, Category> = new Map();
+  private workflowsRoot: string;
+
+  constructor(workflowsRoot?: string) {
+    this.workflowsRoot = workflowsRoot ?? WORKFLOWS_ROOT;
+  }
 
   async load(): Promise<void> {
     this.workflows.clear();
@@ -69,15 +74,19 @@ export class WorkflowRegistry {
 
   private async discoverCategories(): Promise<Category[]> {
     const categories: Category[] = [];
-    const entries = await readdir(WORKFLOWS_ROOT, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      categories.push({
-        id: entry.name,
-        name: this.formatCategoryName(entry.name),
-        description: '',
-        path: join(WORKFLOWS_ROOT, entry.name),
-      });
+    try {
+      const entries = await readdir(this.workflowsRoot, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        categories.push({
+          id: entry.name,
+          name: this.formatCategoryName(entry.name),
+          description: '',
+          path: join(this.workflowsRoot, entry.name),
+        });
+      }
+    } catch {
+      // Directory doesn't exist or can't be read, return empty categories
     }
     return categories;
   }
