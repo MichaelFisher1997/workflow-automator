@@ -273,12 +273,15 @@ export class WorkflowRegistry {
     const secrets: SecretRequirement[] = [];
     const secretsBlock = content.match(/# secrets:[\s\S]*?(?=\n# [a-z]|\n\n|$)/i);
     if (secretsBlock) {
-      const regex = /#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*(.+)/g;
-      for (const item of secretsBlock[0].matchAll(regex)) {
+      // Match individual secret entries with name, description, and optional required field
+      const entryRegex = /#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*([^\n]+)(?:[\s\S]*?#\s+required:\s*(true|false))?/g;
+      for (const item of secretsBlock[0].matchAll(entryRegex)) {
         const name = item[1];
         const description = item[2];
+        const requiredStr = item[3];
         if (!name || !description) continue;
-        secrets.push({ name, description: description.trim(), required: true });
+        const required = requiredStr ? requiredStr.trim() === 'true' : true;
+        secrets.push({ name, description: description.trim(), required });
       }
     }
 

@@ -8,8 +8,10 @@
 # secrets:
 #   - name: API_KEY
 #     description: API key for service
+#     required: true
 #   - name: TOKEN
 #     description: Authentication token
+#     required: false
 # triggers:
 #   - schedule
 # variants:

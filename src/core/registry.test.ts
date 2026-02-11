@@ -95,7 +95,7 @@ describe('WorkflowRegistry', () => {
       expect(workflow?.type).toBe('set');
     });
 
-    test('should parse multiple secrets', async () => {
+    test('should parse multiple secrets with required field', async () => {
       await registry.load();
       const workflow = registry.getWorkflow('test-category/another-workflow');
       
@@ -103,6 +103,12 @@ describe('WorkflowRegistry', () => {
       const secretNames = workflow?.metadata.secrets.map(s => s.name);
       expect(secretNames).toContain('API_KEY');
       expect(secretNames).toContain('TOKEN');
+      
+      // Verify required field is parsed correctly
+      const apiKeySecret = workflow?.metadata.secrets.find(s => s.name === 'API_KEY');
+      const tokenSecret = workflow?.metadata.secrets.find(s => s.name === 'TOKEN');
+      expect(apiKeySecret?.required).toBe(true);
+      expect(tokenSecret?.required).toBe(false);
     });
   });
 
