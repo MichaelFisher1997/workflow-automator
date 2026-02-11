@@ -85,8 +85,13 @@ export class WorkflowRegistry {
           path: join(this.workflowsRoot, entry.name),
         });
       }
-    } catch {
-      // Directory doesn't exist or can't be read, return empty categories
+    } catch (error) {
+      // Only ENOENT (directory doesn't exist) is expected - other errors should be logged
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        // Expected - directory doesn't exist, return empty categories
+      } else {
+        console.warn('Warning: Could not read workflows directory:', error);
+      }
     }
     return categories;
   }

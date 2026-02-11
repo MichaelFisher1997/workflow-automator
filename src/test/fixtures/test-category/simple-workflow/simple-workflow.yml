@@ -8,6 +8,7 @@
 # secrets:
 #   - name: TEST_SECRET
 #     description: A test secret
+#     required: true
 # triggers:
 #   - push
 #   - pull_request

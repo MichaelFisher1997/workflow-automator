@@ -73,7 +73,7 @@ describe('WorkflowRegistry', () => {
       expect(workflow?.metadata.secrets.length).toBe(1);
       expect(workflow?.metadata.secrets[0]?.name).toBe('TEST_SECRET');
       expect(workflow?.metadata.secrets[0]?.description).toBe('A test secret');
-      expect(workflow?.metadata.secrets[0]?.required).toBeUndefined();
+      expect(workflow?.metadata.secrets[0]?.required).toBe(true);
     });
 
     test('should parse triggers from metadata', async () => {
