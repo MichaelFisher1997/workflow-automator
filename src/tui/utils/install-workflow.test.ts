@@ -6,6 +6,17 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { constants } from 'node:fs';
 
+async function expectFileNotToExist(filePath: string): Promise<void> {
+  let fileExists = false;
+  try {
+    await access(filePath, constants.F_OK);
+    fileExists = true;
+  } catch {
+    // Expected - file should not exist
+  }
+  expect(fileExists).toBe(false);
+}
+
 describe('installWorkflow', () => {
   let tempDir: string;
   let sourceDir: string;
@@ -168,13 +179,7 @@ jobs:
 
       // Verify file was NOT created
       const targetFile = join(tempDir, '.github', 'workflows', 'test-workflow.yml');
-      try {
-        await access(targetFile, constants.F_OK);
-        expect(true).toBe(false); // Should not reach here
-      } catch {
-        // Expected - file should not exist
-        expect(true).toBe(true);
-      }
+      await expectFileNotToExist(targetFile);
     });
 
     test('should report overwrite in dry-run mode when file exists', async () => {

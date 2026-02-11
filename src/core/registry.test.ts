@@ -206,7 +206,7 @@ describe('WorkflowRegistry', () => {
 
   describe('edge cases', () => {
     test('should handle empty workflows directory', async () => {
-      const emptyRegistry = new WorkflowRegistry(join(__dirname, '..', 'test', 'fixtures', 'non-existent'));
+      const emptyRegistry = new WorkflowRegistry(join(__dirname, '..', 'test', 'fixtures', 'this-directory-does-not-exist-for-empty-test'));
       await emptyRegistry.load();
       
       expect(emptyRegistry.getWorkflows()).toEqual([]);
