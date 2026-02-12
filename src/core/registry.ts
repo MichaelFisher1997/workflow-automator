@@ -118,10 +118,12 @@ export class WorkflowRegistry {
       const files = await this.safeReadDir(workflowPath);
       if (!files) continue;
 
-      const yamlFiles = files.filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'));
-      if (yamlFiles.length === 0) continue;
+      const workflowFiles = files.filter((file) => 
+        file.endsWith('.yml') || file.endsWith('.yaml') || file.endsWith('.properties')
+      );
+      if (workflowFiles.length === 0) continue;
 
-      const grouped = this.groupByBaseName(yamlFiles);
+      const grouped = this.groupByBaseName(workflowFiles);
       for (const [baseName, variants] of grouped) {
         const workflow = await this.parseWorkflow({
           category,
@@ -149,8 +151,10 @@ export class WorkflowRegistry {
       const files = await this.safeReadDir(typePath);
       if (!files) continue;
 
-      const yamlFiles = files.filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'));
-      const grouped = this.groupByBaseName(yamlFiles);
+      const workflowFiles = files.filter((file) => 
+        file.endsWith('.yml') || file.endsWith('.yaml') || file.endsWith('.properties')
+      );
+      const grouped = this.groupByBaseName(workflowFiles);
 
       for (const [baseName, variants] of grouped) {
         const workflowType = this.deriveWorkflowType(baseName, category.id);
@@ -215,7 +219,7 @@ export class WorkflowRegistry {
         return weight !== 0 ? weight : a.name.localeCompare(b.name);
       });
 
-    const workflowId = `${args.category.id}/${args.workflowType}`;
+    const workflowId = metadata.id ?? `${args.category.id}/${args.workflowType}`;
 
     return {
       id: workflowId,
