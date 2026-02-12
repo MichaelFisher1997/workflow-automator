@@ -349,7 +349,11 @@ export class WorkflowRegistry {
   private async safeReadDir(path: string): Promise<string[] | null> {
     try {
       return await readdir(path);
-    } catch {
+    } catch (error) {
+      // Only ENOENT (directory doesn't exist) is expected - other errors should be logged
+      if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') {
+        console.warn(`Warning: Could not read directory ${path}:`, error);
+      }
       return null;
     }
   }
