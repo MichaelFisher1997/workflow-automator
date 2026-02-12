@@ -1,0 +1,30 @@
+# ---
+# id: test-category/another-workflow
+# category: test-category
+# type: template
+# name: Another Test Workflow
+# description: Another workflow with inline metadata
+# targetPath: .github/workflows/another.yml
+# secrets:
+#   - name: API_KEY
+#     description: API key for service
+#     required: true
+#   - name: TOKEN
+#     description: Authentication token
+#     required: false
+# triggers:
+#   - schedule
+# variants:
+#   - name: standard
+#     description: Basic template
+# ---
+
+name: Another Test
+on:
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4

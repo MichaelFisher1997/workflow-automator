@@ -82,9 +82,10 @@ export async function installWorkflow(
       },
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
     return {
       success: false,
-      message: error instanceof Error ? error.message : 'Unknown error occurred',
+      message: `Failed to install workflow: ${message}`,
     };
   }
 }

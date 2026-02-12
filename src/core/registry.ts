@@ -37,7 +37,7 @@ function findWorkflowsRoot(): string {
 
 const WORKFLOWS_ROOT = findWorkflowsRoot();
 
-interface ParsedMetadata {
+export interface ParsedMetadata {
   id?: string;
   category?: string;
   type?: WorkflowType;
@@ -52,6 +52,11 @@ interface ParsedMetadata {
 export class WorkflowRegistry {
   private workflows: Map<string, Workflow> = new Map();
   private categories: Map<string, Category> = new Map();
+  private workflowsRoot: string;
+
+  constructor(workflowsRoot?: string) {
+    this.workflowsRoot = workflowsRoot ?? WORKFLOWS_ROOT;
+  }
 
   async load(): Promise<void> {
     this.workflows.clear();
@@ -69,15 +74,24 @@ export class WorkflowRegistry {
 
   private async discoverCategories(): Promise<Category[]> {
     const categories: Category[] = [];
-    const entries = await readdir(WORKFLOWS_ROOT, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      categories.push({
-        id: entry.name,
-        name: this.formatCategoryName(entry.name),
-        description: '',
-        path: join(WORKFLOWS_ROOT, entry.name),
-      });
+    try {
+      const entries = await readdir(this.workflowsRoot, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        categories.push({
+          id: entry.name,
+          name: this.formatCategoryName(entry.name),
+          description: '',
+          path: join(this.workflowsRoot, entry.name),
+        });
+      }
+    } catch (error) {
+      // Only ENOENT (directory doesn't exist) is expected - other errors should be logged
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        // Expected - directory doesn't exist, return empty categories
+      } else {
+        console.warn('Warning: Could not read workflows directory:', error);
+      }
     }
     return categories;
   }
@@ -259,12 +273,15 @@ export class WorkflowRegistry {
     const secrets: SecretRequirement[] = [];
     const secretsBlock = content.match(/# secrets:[\s\S]*?(?=\n# [a-z]|\n\n|$)/i);
     if (secretsBlock) {
-      const regex = /#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*(.+)/g;
-      for (const item of secretsBlock[0].matchAll(regex)) {
+      // Match individual secret entries with name, description, and optional required field
+      const entryRegex = /#\s+- name:\s*(\S+)[\s\S]*?#\s+description:\s*([^\n]+)(?:[\s\S]*?#\s+required:\s*(true|false))?/g;
+      for (const item of secretsBlock[0].matchAll(entryRegex)) {
         const name = item[1];
         const description = item[2];
+        const requiredStr = item[3];
         if (!name || !description) continue;
-        secrets.push({ name, description: description.trim(), required: true });
+        const required = requiredStr ? requiredStr.trim() === 'true' : true;
+        secrets.push({ name, description: description.trim(), required });
       }
     }
 
@@ -332,7 +349,11 @@ export class WorkflowRegistry {
   private async safeReadDir(path: string): Promise<string[] | null> {
     try {
       return await readdir(path);
-    } catch {
+    } catch (error) {
+      // Only ENOENT (directory doesn't exist) is expected - other errors should be logged
+      if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') {
+        console.warn(`Warning: Could not read directory ${path}:`, error);
+      }
       return null;
     }
   }

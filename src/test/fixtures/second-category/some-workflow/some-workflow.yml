@@ -1,0 +1,13 @@
+# id: second-category/some-workflow
+# category: second-category
+# type: set
+# name: Some Workflow
+# description: A workflow in the second category
+
+name: Some Test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
