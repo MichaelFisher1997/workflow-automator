@@ -1,0 +1,103 @@
+# ---
+# id: ci/sonarqube
+# category: ci
+# type: set
+# name: SonarQube Analysis
+# description: Self-hosted SonarQube scan with SARIF export to GitHub Security Tab
+# targetPath: .github/workflows/sonarqube.yml
+# secrets:
+#   - name: SONAR_TOKEN
+#     description: SonarQube authentication token
+#     required: true
+#   - name: SONAR_HOST_URL
+#     description: SonarQube server URL (e.g., https://sonar.example.com)
+#     required: true
+# triggers:
+#   - push
+#   - pull_request
+# variants:
+#   - name: standard
+#     description: Self-hosted SonarQube with GitHub Security integration
+# ---
+
+name: SonarQube Analysis
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonarqube-analysis:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      checks: write
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-progress --no-suggest --optimize-autoloader
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: SonarQube → GitHub Security
+        uses: vmvarela/sonarqube-ce-sarif-action@v1
+        with:
+          sonar-host-url: ${{ secrets.SONAR_HOST_URL }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          wait-for-processing: false
+          processing-delay: 60
+
+      - name: Fix SARIF locations
+        run: |
+          jq 'walk(if type == "object" and has("results") then .results |= map(select(.locations != null and (.locations | length) > 0)) else . end)' sonarqube.sarif > sonarqube-fixed.sarif
+          mv sonarqube-fixed.sarif sonarqube.sarif
+          echo "Filtered SARIF file - removed results without locations"
+
+      - name: Upload SARIF to GitHub Security Tab
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sonarqube.sarif
+          category: sonarqube
